@@ -1,0 +1,911 @@
+/* ===== Nebenexistenz · Logik ===== */
+const BUILD="__BUILD__";
+const KEY="nebenexistenz-v1";
+const GV=1;
+const MAX_AKTIV=3;
+const IN_FRAME=(()=>{try{return window.self!==window.top}catch(e){return true}})();
+
+/* ---------- Zustand ---------- */
+function fresh(){return{
+  gv:GV, onb:false, demo:false,
+  prof:{land:"", ort:"", beruf:"", netto:0, fix:0, ruecklage:0, stunden:4, tage:[2,6]},
+  pduties:{}, werte:[], people:[], ventures:[], time:[], weeks:[],
+  settings:{theme:"auto", vib:true, apps:{wg:"https://wurstgott.github.io/wertegeruest/", bt:"https://wurstgott.github.io/biotop/", gk:"https://wurstgott.github.io/glueckskompass/"}},
+  lv:{}, fresh:[], seen:{}, mq:[], hint:{d:"",id:""}, hintsOff:{}, opens:{d:"",n:0}, override:"", tab:"home"
+}}
+let S=fresh();
+function load(){
+  try{const raw=localStorage.getItem(KEY); if(!raw) return;
+    const o=JSON.parse(raw); S=deepMerge(fresh(),o); migrate();
+  }catch(e){}
+}
+function deepMerge(base,o){
+  for(const k in o){ if(o[k]&&typeof o[k]==="object"&&!Array.isArray(o[k])&&base[k]&&typeof base[k]==="object"&&!Array.isArray(base[k])) base[k]=deepMerge(base[k],o[k]); else base[k]=o[k] }
+  return base;
+}
+function migrate(){
+  S.ventures.forEach(v=>{ v.duties=v.duties||{}; v.team=v.team||[]; v.runs=v.runs||[]; v.results=v.results||[]; v.werte=v.werte||{}; v.bio=v.bio||{}; v.calc=Object.assign({},(tplOf(v)||{}).calc||{},v.calc||{}) });
+  S.gv=GV;
+}
+function persist(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
+function save(){ detectProgress(); persist() }
+
+/* ---------- Hilfen ---------- */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?"":s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid=()=>Math.random().toString(36).slice(2,9);
+const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
+const dayDiff=(a,b)=>Math.round((new Date(b+"T12:00")-new Date(a+"T12:00"))/864e5);
+const eur=(n,d=0)=>(isFinite(n)?n:0).toLocaleString("de-DE",{minimumFractionDigits:d,maximumFractionDigits:d})+" €";
+const n0=x=>{const v=parseFloat(String(x).replace(",","."));return isFinite(v)?v:0};
+const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
+const tplOf=v=>VORLAGEN.find(t=>t.id===v.tpl);
+const landN=()=>{const l=LAENDER.find(x=>x.id===S.prof.land);return l?l.n:"deinem Bundesland"};
+const dateDE=d=>{if(!d)return"";const [y,m,t]=d.split("-");return t+"."+m+"."+y};
+const agoTxt=d=>{if(!d)return"noch nie";const n=dayDiff(d,today());return n<=0?"heute":n===1?"gestern":"vor "+n+" Tagen"};
+const WT=["So","Mo","Di","Mi","Do","Fr","Sa"];
+const WTL=["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
+function snapshot(){return JSON.parse(JSON.stringify(S))}
+const aktive=()=>S.ventures.filter(v=>!v.exit);
+const vById=id=>S.ventures.find(v=>v.id===id);
+
+/* ---------- Rechnung ---------- */
+function calc(v){
+  const c=v.calc, t=tplOf(v);
+  const umsatz=n0(c.preis)*n0(c.stueck);
+  const ware=n0(c.kosten)*n0(c.stueck);
+  const abg=c.form==="mini"?RECHT.minijobAbgabe/100:0;
+  const personal=n0(c.lohn)*n0(c.teamStd)*(1+abg);
+  const kosten=ware+n0(c.stand)+personal+n0(c.fix);
+  const gewinn=umsatz-kosten;
+  const laeufe=n0(c.laeufe||t.laeufe);
+  const jahrU=umsatz*laeufe, jahrG=gewinn*laeufe;
+  const meine=n0(c.meineStd);
+  const proStd=meine>0?gewinn/meine:null;
+  const start=n0(c.start);
+  const amort=gewinn>0?Math.ceil(start/gewinn):null;
+  const wochenStd=meine*laeufe/52;
+  return{umsatz,ware,personal,kosten,gewinn,laeufe,jahrU,jahrG,meine,proStd,start,amort,wochenStd,abg};
+}
+function rahmen(){
+  const p=S.prof, notgroschen=3*n0(p.fix), frei=Math.max(0,n0(p.ruecklage)-notgroschen);
+  const deckel=Math.round(frei*0.15/50)*50, monat=n0(p.netto)-n0(p.fix);
+  return{notgroschen,frei,deckel,monat,gesetzt:n0(p.ruecklage)>0||n0(p.netto)>0};
+}
+function jahresUmsatzAlle(){return aktive().reduce((s,v)=>s+calc(v).jahrU,0)}
+function jahresGewinnAlle(){return aktive().reduce((s,v)=>s+calc(v).jahrG,0)}
+function rechnungTxt(v){const c=v.calc,r=calc(v),t=tplOf(v);
+  return `Pro ${t.lauf}: Preis ${eur(n0(c.preis),2)}, Stückkosten ${eur(n0(c.kosten),2)}, ${n0(c.stueck)} Stück, Stand- oder Plattformkosten ${eur(n0(c.stand))}, Team ${n0(c.teamStd)} Std. zu ${eur(n0(c.lohn),2)}, sonstige Fixkosten ${eur(n0(c.fix))}. Ergebnis pro ${t.lauf}: Umsatz ${eur(r.umsatz)}, Gewinn ${eur(r.gewinn)}. ${r.laeufe} Läufe im Jahr, Startkosten ${eur(r.start)}.`}
+
+/* ---------- Bauteile ---------- */
+function dutiesFor(v){
+  const f=(tplOf(v)||{}).f||{};
+  return PFLICHTEN.filter(d=>{try{return d.wenn(S.prof,f)}catch(e){return false}});
+}
+const PERSON=new Set(["ag","beamt","kv","fse","ku","euer","ihk","kasse","bg"]);
+function dutyDone(v,d){return PERSON.has(d.id)?!!S.pduties[d.id]:!!(v.duties||{})[d.id]}
+function traegt(v){
+  if(v.runs.length<2) return false;
+  return v.runs.slice(-2).every(r=>{const g=n0(r.umsatz)-n0(r.kosten);const m=n0(r.meineStd),t=n0(r.teamStd);return g>0&&m<=Math.max(2,0.25*(m+t))});
+}
+function stageChecks(v){
+  const c=v.calc;
+  return[
+    true,
+    !!v.passOk&&n0(c.preis)>0&&n0(c.stueck)>0,
+    dutiesFor(v).filter(d=>d.w==="vor").every(d=>dutyDone(v,d)),
+    !!(v.prod&&v.prod.trim()),
+    v.team.length>0||!!v.solo,
+    v.runs.length>=1,
+    traegt(v)
+  ];
+}
+function stage(v){const c=stageChecks(v);let n=0;for(const x of c){if(x)n++;else break}return n}
+function detectProgress(){
+  S.ventures.forEach(v=>{
+    const n=stage(v), old=S.lv[v.id]||0;
+    if(n>old){ for(let i=old;i<n;i++) S.fresh.push(v.id+":"+i);
+      if(n>=3&&!S.seen.amt){S.seen.amt=1;S.mq.push("amt")}
+      if(n>=6&&!S.seen.lauf){S.seen.lauf=1;S.mq.push("lauf")}
+      if(n>=7&&!S.seen.traegt){S.seen.traegt=1;S.mq.push("traegt")}
+    }
+    S.lv[v.id]=n;
+    if(v.exit&&!S.seen.exit){S.seen.exit=1;S.mq.push("exit")}
+  });
+  if(S.ventures.length&&!S.seen.first){S.seen.first=1;S.mq.push("first")}
+}
+
+/* ---------- Gleichgewicht ---------- */
+function weekMin(vid){const t=today();return S.time.filter(x=>dayDiff(x.d,t)<7&&(!vid||x.vid===vid)).reduce((s,x)=>s+n0(x.min),0)}
+function lifeShare(){if(!S.people.length) return null; const t=today(); return S.people.filter(p=>p.last&&dayDiff(p.last,t)<=14).length/S.people.length}
+function balance(){
+  const budget=Math.max(30,n0(S.prof.stunden)*60), load=weekMin()/budget, ls=lifeShare();
+  const solo=aktive().filter(v=>v.solo).length;
+  let score=clamp((load-0.8)*0.9,-0.4,1.1)+(ls==null?0:(0.55-ls)*0.9)+solo*0.08;
+  score=clamp(score,-1,1);
+  const state=score>0.25?"zieht":score<-0.2?"leben":"gleich";
+  return{score,load,ls,budget,state};
+}
+const isSteuertag=()=>S.prof.tage.includes(new Date().getDay());
+
+/* ---------- Nächster Schritt ---------- */
+function stalePerson(){
+  if(!S.people.length) return null;
+  return [...S.people].sort((a,b)=>(a.last||"0000")<(b.last||"0000")?-1:1)[0];
+}
+function lifeStep(reason){
+  const p=stalePerson();
+  if(!p) return{tone:"var(--leben)",ey:"Leben",t:"Trag die Menschen ein, die dir nah sind",x:reason+" Die App achtet dann darauf, dass sie nicht aus dem Blick geraten.",btns:[{l:"Menschen eintragen",a:"sheet",id:"people",c:"leben"}]};
+  const imp=LEBEN_IMPULSE[(new Date().getDate()+p.name.length)%LEBEN_IMPULSE.length].replace("{p}",p.name);
+  return{tone:"var(--leben)",ey:"Leben",t:imp,x:reason+" Zuletzt eingetragen: "+agoTxt(p.last)+".",btns:[{l:"Erledigt",a:"seen",id:p.id,c:"leben"},{l:"Später",a:"later",c:"ghost"}]};
+}
+function ventureStep(v){
+  const n=stage(v), t=tplOf(v);
+  const B={tone:"var(--neben)",ey:v.name+" · "+(BAUTEILE[n]?BAUTEILE[n].verb:"übergeben")};
+  if(n===1) return{...B,t:"Rechnung für „"+v.name+"“ prüfen",x:"Trag Preis, Kosten und Stückzahl ein. Die App zeigt dir, ob es sich trägt und ob das Startgeld zu deinem Rahmen passt.",btns:[{l:"Zur Rechnung",a:"venture",id:v.id,sub:"rechnung"}]};
+  if(n===2){const d=dutiesFor(v).filter(d=>d.w==="vor").find(d=>!dutyDone(v,d));
+    return{...B,t:d.t,x:fill(d.x,v).split(". ")[0]+".",btns:[{l:"Ansehen",a:"venture",id:v.id,sub:"pflichten"},...(d.auftrag?[{l:"Claude beauftragen",a:"auftrag",id:v.id,task:d.auftrag,c:"ghost"}]:[])]}}
+  if(n===3) return{...B,t:"Konzept für „"+v.name+"“ ausarbeiten lassen",x:"Lass Claude drei Varianten mit Stückkosten und Kennzeichnungspflichten ausarbeiten. Das Ergebnis legst du hier ab.",btns:[{l:"Claude beauftragen",a:"auftrag",id:v.id,task:"a_konzept"},{l:"Selbst eintragen",a:"venture",id:v.id,sub:"auftraege",c:"ghost"}]};
+  if(n===4) return{...B,t:t.f.team?"Jemanden finden, der den Alltag führt":"Entscheiden, wer den Alltag macht",x:"Ein Vorhaben trägt erst dann nebenher, wenn nicht du jeden Handgriff machst.",btns:[{l:"Zum Team",a:"venture",id:v.id,sub:"team"},{l:"Anzeige schreiben lassen",a:"auftrag",id:v.id,task:"a_stelle",c:"ghost"}]};
+  if(n===5) return{...B,t:"Den ersten "+t.lauf+" abrechnen",x:"Trag nach dem ersten Lauf Umsatz, Kosten und deine eigenen Stunden ein. So siehst du, was wirklich übrig bleibt.",btns:[{l:"Lauf eintragen",a:"sheet",id:"run",vid:v.id}]};
+  if(n===6) return{...B,t:"Zeigen, dass es sich trägt",x:"Zwei Läufe mit Gewinn, bei denen du kaum Zeit gebraucht hast, machen „"+v.name+"“ zu einem tragenden Teil.",btns:[{l:"Lauf eintragen",a:"sheet",id:"run",vid:v.id},{l:"Handbuch fürs Team",a:"auftrag",id:v.id,task:"a_handbuch",c:"ghost"}]};
+  return{tone:"var(--geld)",ey:v.name+" · weitergeben",t:"Prüfen, ob „"+v.name+"“ übergeben werden kann",x:"Es trägt sich. Jetzt ist ein guter Moment, es an jemanden zu verkaufen, der es selbst führen will.",btns:[{l:"Übergabe ansehen",a:"venture",id:v.id,sub:"uebergabe"}]};
+}
+function nextStep(){
+  const p=S.prof;
+  if(!p.land||!p.beruf) return{tone:"var(--neben)",ey:"Anfang",t:"Deinen Rahmen festlegen",x:"Bundesland, Hauptberuf, Geld und Zeit. Daraus leitet die App ab, welche Schritte nötig sind und wie viel du einsetzen kannst.",btns:[{l:"Rahmen festlegen",a:"sheet",id:"profil"}]};
+  if(!isSteuertag()&&S.override!==today()){
+    const st=lifeStep("Heute ist kein Steuertag, also ist Leben dran.");
+    st.btns.push({l:"Doch kurz etwas erledigen",a:"override",c:"ghost"}); return st;
+  }
+  const b=balance();
+  if(b.state==="zieht"&&S.override!==today()) { const st=lifeStep("Die Vorhaben ziehen gerade stärker als dein Rahmen vorsieht."); st.btns.push({l:"Trotzdem weiter",a:"override",c:"ghost"}); return st }
+  if(new Date().getDay()===0&&!(S.weeks.length&&dayDiff(S.weeks[S.weeks.length-1].d,today())<6))
+    return{tone:"var(--sinn)",ey:"Wochenblick",t:"Wie war die Woche?",x:"Drei kurze Fragen: mit wem du Zeit hattest, ob die Vorhaben Kraft gegeben oder genommen haben, und was du weglässt.",btns:[{l:"Wochenblick",a:"sheet",id:"week",c:"sinn"}]};
+  const act=aktive();
+  if(!act.length) return{tone:"var(--neben)",ey:"Erstes Vorhaben",t:"Ein erstes Vorhaben aufhängen",x:"Wähl eine von sieben Vorlagen. Jede bringt ihre Pflichtschritte, eine Rechnung und passende Aufträge an Claude mit.",btns:[{l:"Vorlagen ansehen",a:"sheet",id:"neu"}]};
+  const sorted=[...act].sort((a,b)=>stage(b)-stage(a)||(a.created<b.created?-1:1));
+  const ripe=sorted.find(v=>stage(v)>=7);
+  const v=ripe||sorted.find(v=>stage(v)<7)||sorted[0];
+  return ventureStep(v);
+}
+
+/* ---------- Text füllen ---------- */
+function fill(s,v){
+  const t=v?tplOf(v):null, f=t?t.f:{};
+  const tm=v&&v.team.length?v.team[0]:null;
+  const r=v?calc(v):null;
+  const pr=v?preisSpanne(v):null;
+  const map={land:landN(),ort:S.prof.ort||"meiner Region",frist:RECHT.fsEFrist,kuV:RECHT.kuVorjahr.toLocaleString("de-DE"),kuL:RECHT.kuLaufend.toLocaleString("de-DE"),
+    kurz:RECHT.kurzTage,mini:RECHT.minijob,abg:RECHT.minijobAbgabe,ml:RECHT.mindestlohn.toLocaleString("de-DE",{minimumFractionDigits:2}),
+    haerte:RECHT.haerte,gew:RECHT.gewStFrei.toLocaleString("de-DE"),ihk:RECHT.ihkFrei.toLocaleString("de-DE"),stand:RECHT.stand,
+    name:v?v.name:"",vorlage:t?t.n:"",taetig:t?t.taetig:"",std:S.prof.stunden,
+    form:tm&&tm.form==="mini"?"geringfügige Beschäftigung (Minijob)":"kurzfristige Beschäftigung",
+    rechnung:v?rechnungTxt(v):"",laeufe:v&&v.runs.length?v.runs.map(x=>dateDE(x.d)+": Umsatz "+eur(n0(x.umsatz))+", Gewinn "+eur(n0(x.umsatz)-n0(x.kosten))).join("; "):"noch keine",
+    preis:pr?eur(pr[0])+" bis "+eur(pr[1]):"",lm:f.lebensmittel?", Lebensmittelüberwachung, Gesundheitsamt":"",
+    team:f.team?", Information des Teams nach § 613a BGB":""};
+  s=s.replace("{kurz}",v&&t?(v.desc||t.kurz):"{kurz}");
+  return s.replace(/\{(\w+)\}/g,(m,k)=>map[k]!=null?map[k]:m);
+}
+function promptFor(v,task){
+  const a=AUFTRAEGE.find(x=>x.id===task);
+  return fill(a.p,v)+"\n\nAntworte auf Deutsch in einfachen Sätzen. Nenne Quellen mit Link und sag klar, was ich selbst prüfen oder mit einer Fachperson klären muss.";
+}
+function preisSpanne(v){
+  const r=calc(v), inv=n0(v.calc.inventar);
+  const lo=Math.max(inv,inv+0.5*Math.max(0,r.jahrG)), hi=Math.max(inv,inv+1.0*Math.max(0,r.jahrG));
+  return[Math.round(lo/100)*100,Math.round(hi/100)*100];
+}
+
+/* ---------- Mobile (Hauptbild) ---------- */
+function shapePath(form,cx,cy,r){
+  switch(form){
+    case"dreieck":return`M${cx} ${cy-r*1.1}L${cx+r*1.05} ${cy+r*.75}L${cx-r*1.05} ${cy+r*.75}Z`;
+    case"blatt":return`M${cx} ${cy-r*1.2}Q${cx+r*1.2} ${cy} ${cx} ${cy+r*1.2}Q${cx-r*1.2} ${cy} ${cx} ${cy-r*1.2}Z`;
+    case"quadrat":return`M${cx-r*.85} ${cy-r*.85}h${r*1.7}v${r*1.7}h${-r*1.7}Z`;
+    case"halbmond":return`M${cx-r} ${cy-r*.2}A${r} ${r} 0 0 0 ${cx+r} ${cy-r*.2}Z`;
+    case"raute":return`M${cx} ${cy-r*1.15}L${cx+r*.9} ${cy}L${cx} ${cy+r*1.15}L${cx-r*.9} ${cy}Z`;
+    case"tropfen":return`M${cx} ${cy-r*1.25}C${cx+r*.4} ${cy-r*.5} ${cx+r} ${cy-r*.1} ${cx+r} ${cy+r*.35}A${r} ${r} 0 0 1 ${cx-r} ${cy+r*.35}C${cx-r} ${cy-r*.1} ${cx-r*.4} ${cy-r*.5} ${cx} ${cy-r*1.25}Z`;
+    default:return`M${cx-r} ${cy}a${r} ${r} 0 1 0 ${r*2} 0a${r} ${r} 0 1 0 ${-r*2} 0Z`;
+  }
+}
+function mobileSVG(){
+  const b=balance(), ang=(b.score*9).toFixed(2);
+  const W="var(--wire)", act=aktive(), done=S.ventures.filter(v=>v.exit);
+  const fr=new Set(S.fresh);
+  let maxY=180; const H=()=>done.length?330:Math.max(220,Math.ceil(maxY+18));
+  let s=`<svg viewBox="0 0 354 __H__" role="img" aria-labelledby="mobT"><title id="mobT">Mobile: links das Leben, rechts die Vorhaben. ${b.state==="zieht"?"Die Vorhaben ziehen stärker.":b.state==="leben"?"Das Leben wiegt schwerer.":"Beide Seiten halten sich die Waage."}</title>`;
+  s+=`<g class="sway"><circle cx="177" cy="8" r="3.2" fill="none" stroke="${W}" stroke-width="1.5"/><line x1="177" y1="11" x2="177" y2="52" stroke="${W}" stroke-width="1.5"/>`;
+  s+=`<g class="tilt" style="transform:rotate(${ang}deg)">`;
+  s+=`<path d="M56 60 Q177 44 298 60" fill="none" stroke="${W}" stroke-width="1.7"/><circle cx="177" cy="52" r="3" fill="${W}"/>`;
+  /* Leben-Seite */
+  s+=`<g class="mob-hit" data-a="tab" data-id="leben" tabindex="0" role="button" aria-label="Lebensseite öffnen">`;
+  s+=`<line x1="56" y1="60" x2="56" y2="118" stroke="${W}" stroke-width="1.5"/>`;
+  s+=`<path class="plate" d="${shapePath("kreis",56,146,28)}" fill="var(--leben)"/>`;
+  s+=`<text x="56" y="150" text-anchor="middle" font-family="var(--f-mono)" font-size="11" fill="var(--on)" letter-spacing=".06em">LEBEN</text>`;
+  const ppl=S.people.slice(0,6);
+  if(ppl.length){
+    s+=`<line x1="56" y1="174" x2="56" y2="194" stroke="${W}" stroke-width="1.5"/><path d="M18 196 Q56 190 96 196" fill="none" stroke="${W}" stroke-width="1.5"/><circle cx="56" cy="193" r="2.2" fill="${W}"/>`;
+    ppl.forEach((p,i)=>{
+      const x=ppl.length===1?56:20+i*(76/(ppl.length-1)), len=22+((i*37)%30), y=195+len;
+      const rec=p.last&&dayDiff(p.last,today())<=14, r=rec?9:7.5; maxY=Math.max(maxY,y+r);
+      s+=`<line x1="${x.toFixed(1)}" y1="195" x2="${x.toFixed(1)}" y2="${(y-r).toFixed(1)}" stroke="${W}" stroke-width="1.2"/>`;
+      s+=rec?`<circle cx="${x.toFixed(1)}" cy="${y}" r="${r}" fill="var(--leben)"/>`:`<circle cx="${x.toFixed(1)}" cy="${y}" r="${r}" fill="none" stroke="var(--leben)" stroke-width="1.5" stroke-dasharray="3 2.5"/>`;
+    });
+  }
+  s+=`</g>`;
+  /* Vorhaben-Seite */
+  s+=`<line x1="298" y1="60" x2="298" y2="88" stroke="${W}" stroke-width="1.5"/><path d="M214 92 Q280 84 340 92" fill="none" stroke="${W}" stroke-width="1.6"/><circle cx="298" cy="88" r="2.5" fill="${W}"/>`;
+  s+=`<g class="mob-hit" data-a="tab" data-id="vorhaben" tabindex="0" role="button" aria-label="Rücklage, zu den Vorhaben"><line x1="216" y1="92" x2="216" y2="112" stroke="${W}" stroke-width="1.3"/><path class="plate" d="${shapePath("kreis",216,126,14)}" fill="var(--geld)"/></g>`;
+  const slots=[[250,58],[286,96],[324,70]];
+  for(let i=0;i<MAX_AKTIV;i++){
+    const [x,len]=slots[i], v=act[i];
+    if(!v){
+      if(i===act.length) s+=`<g class="mob-hit" data-a="sheet" data-id="neu" tabindex="0" role="button" aria-label="Neues Vorhaben aufhängen"><line x1="${x}" y1="92" x2="${x}" y2="${92+len-18}" stroke="${W}" stroke-width="1.2" stroke-dasharray="2 3"/><path d="${shapePath("kreis",x,92+len,16)}" fill="none" stroke="var(--faint)" stroke-width="1.4" stroke-dasharray="4 3"/><text x="${x}" y="${92+len+4}" text-anchor="middle" font-family="var(--f-ui)" font-size="16" fill="var(--faint)">+</text></g>`;
+      continue;
+    }
+    const t=tplOf(v), n=stage(v), r=9+n*2.3, ybase=92+len+n*4; maxY=Math.max(maxY,ybase+r*1.3);
+    s+=`<g class="mob-hit" data-a="venture" data-id="${v.id}" tabindex="0" role="button" aria-label="${esc(v.name)}, ${n} von 7 Bauteilen">`;
+    s+=`<line x1="${x}" y1="92" x2="${x}" y2="${(ybase-r).toFixed(1)}" stroke="${W}" stroke-width="1.3"/>`;
+    for(let k=0;k<7;k++){
+      const yy=100+k*((ybase-r-108)/6);
+      const on=k<n, nx=k===n, cls=fr.has(v.id+":"+k)?" class=\"plate-new\" style=\"transform-origin:"+x+"px "+yy.toFixed(1)+"px\"":"";
+      if(on) s+=`<circle${cls} cx="${x}" cy="${yy.toFixed(1)}" r="2.6" fill="var(--neben)"/>`;
+      else if(nx) s+=`<circle cx="${x}" cy="${yy.toFixed(1)}" r="2.6" fill="var(--bg)" stroke="var(--neben)" stroke-width="1.2"/>`;
+    }
+    const pc=fr.size&&[...fr].some(k=>k.startsWith(v.id+":"))?` class="plate plate-new" style="transform-origin:${x}px ${ybase}px"`:` class="plate"`;
+    s+=`<path${pc} d="${shapePath(t.form,x,ybase,r)}" fill="var(--neben)"/>`;
+    s+=`</g>`;
+  }
+  s+=`</g></g>`;
+  /* Weitergegeben: ruht auf dem Boden, verschwindet nie */
+  if(done.length){
+    s+=`<line x1="24" y1="318" x2="330" y2="318" stroke="var(--line)" stroke-width="1.2"/>`;
+    s+=`<text x="24" y="310" font-family="var(--f-mono)" font-size="10" fill="var(--faint)" letter-spacing=".06em">WEITERGEGEBEN</text>`;
+    done.slice(0,8).forEach((v,i)=>{const x=150+i*24;s+=`<g class="mob-hit" data-a="venture" data-id="${v.id}" tabindex="0" role="button" aria-label="${esc(v.name)}, weitergegeben"><path d="${shapePath(tplOf(v).form,x,309,7)}" fill="var(--faint)"/></g>`});
+  }
+  s+=`</svg>`;
+  return s.replace("__H__",H());
+}
+function balanceLine(){
+  const b=balance(), h=(weekMin()/60), ls=lifeShare();
+  const st={zieht:"Die Vorhaben ziehen",leben:"Das Leben wiegt schwerer",gleich:"Im Gleichgewicht"}[b.state];
+  const ppl=S.people.length?` · ${S.people.filter(p=>p.last&&dayDiff(p.last,today())<=14).length} von ${S.people.length} Menschen gesehen`:"";
+  return`<p class="balance"><b>${st}</b> · ${h.toLocaleString("de-DE",{maximumFractionDigits:1})} von ${S.prof.stunden} Std. Steuerzeit${ppl}</p>`;
+}
+
+/* ---------- Ansichten ---------- */
+const ICON={
+  home:`<svg viewBox="0 0 24 24"><path d="M12 3v5M4 9q8-3 16 0M6 9v4M18 9v3"/><circle cx="6" cy="16" r="3"/><path d="M15.5 15h5l-2.5 4.5z"/></svg>`,
+  vorhaben:`<svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>`,
+  amt:`<svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M14 3v5h5M9 13h7M9 17h5"/></svg>`,
+  leben:`<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c.5-4 3-6 6-6s5.5 2 6 6M15 14.5c2.6 0 4.6 1.6 5 5"/></svg>`,
+  gear:`<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/></svg>`,
+  check:`<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`
+};
+function stepCard(st){
+  return`<section class="next" style="--tone:${st.tone}" aria-labelledby="nextT"><p class="eyebrow"><span class="knot"></span>Nächster Schritt · ${esc(st.ey)}</p><h2 id="nextT">${esc(st.t)}</h2><p class="muted small">${esc(st.x)}</p><div class="row">${st.btns.map(btnHTML).join("")}</div></section>`;
+}
+function btnHTML(b){
+  const at=Object.entries(b).filter(([k])=>!["l","c"].includes(k)).map(([k,v])=>`data-${k}="${esc(v)}"`).join(" ");
+  return`<button class="btn ${b.c||""}" ${at}>${esc(b.l)}</button>`;
+}
+function hintFor(){
+  const t=today();
+  if(S.hint.d===t) return S.hint.id?HINTS.find(h=>h.id===S.hint.id):null;
+  const h=HINTS.find(h=>!S.hintsOff[h.id]&&h.when());
+  S.hint={d:t,id:h?h.id:""}; persist(); return h;
+}
+const HINTS=[
+  {id:"oft",when:()=>S.opens.n>=4,t:"Du hast heute schon oft hineingesehen.",x:"Die Vorhaben laufen auch, wenn du nicht schaust. Die App meldet sich nicht von selbst, und das ist Absicht."},
+  {id:"markt",when:()=>{const m=new Date().getMonth();return m>=1&&m<=6&&aktive().some(v=>tplOf(v).f.markt&&!v.duties.platz)},t:"Weihnachtsmärkte vergeben Plätze früh.",x:"Viele Fristen enden im Frühjahr oder Sommer. Der Auftrag „Passende Märkte finden“ sammelt sie für dich."},
+  {id:"ku",when:()=>jahresUmsatzAlle()>20000,t:"Dein erwarteter Jahresumsatz nähert sich 25.000 Euro.",x:"Über dieser Grenze endet im Folgejahr die Kleinunternehmerregelung. Alle Vorhaben zählen zusammen."},
+  {id:"werte",when:()=>aktive().length>0&&!S.werte.length,t:"Deine Werte fehlen noch.",x:"Wenn du deine Werte einträgst, prüft jedes Vorhaben, ob es dazu passt. Die Werte findest du im Wertegerüst."},
+  {id:"solo",when:()=>aktive().some(v=>v.solo&&stage(v)>=5),t:"Ein Vorhaben machst du allein.",x:"Das ist erlaubt, kostet aber deine Zeit. Auf Dauer trägt sich eine Nebenexistenz leichter mit jemandem, der den Alltag führt."}
+];
+function viewHome(){
+  const st=nextStep(), h=hintFor();
+  let s=`<h1 class="vh">Nebenexistenz</h1><div class="stage">${mobileSVG()}</div>${balanceLine()}`;
+  if(S.demo) s+=`<div class="banner"><span>Du siehst Beispieldaten.</span><button class="btn small ghost" data-a="demoOff">Beispiel löschen</button></div>`;
+  s+=stepCard(st);
+  if(h) s+=`<div class="sec"><div class="note neben"><strong>${esc(h.t)}</strong><span>${esc(h.x)}</span><div><button class="linkbtn" data-a="hintOff" data-id="${h.id}">Passt so</button></div></div></div>`;
+  const act=aktive();
+  if(act.length){
+    s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Hängt gerade</span></div><div class="list">`;
+    act.forEach(v=>{const n=stage(v);s+=`<button class="li" data-a="venture" data-id="${v.id}"><span class="grow"><span class="t">${esc(v.name)}</span><span class="s">${BAUTEILE[n-1].n} · ${n} von 7 Bauteilen</span><span class="parts" aria-hidden="true">${BAUTEILE.map((b,i)=>`<i class="part ${i<n?"on":i===n?"nx":""}"></i>`).join("")}</span></span><span class="chev"></span></button>`});
+    s+=`</div></div>`;
+  }
+  s+=`<div class="sec"><div class="chips"><button class="btn ghost small" data-a="sheet" data-id="time">Steuerzeit eintragen</button>${isSteuertag()?`<span class="pill info">Heute ist Steuertag</span>`:`<span class="pill">Heute ist ${WTL[new Date().getDay()]}, kein Steuertag</span>`}</div></div>`;
+  s+=foot();
+  return s;
+}
+function foot(){return`<div class="foot"><span>Die App bereitet vor und erklärt. Sie ersetzt keine Steuer- oder Rechtsberatung. Rechtsstand ${RECHT.stand}.</span><span>Alle Daten bleiben auf diesem Gerät. Stand ${esc(BUILD)}. © Carlo Maximilian Engeländer</span></div>`}
+
+function viewVorhaben(){
+  const act=aktive(), done=S.ventures.filter(v=>v.exit);
+  let s=`<h2 style="margin-top:12px">Vorhaben</h2><p class="muted small">Höchstens drei gleichzeitig. So bleibt die Nebenexistenz neben dem Leben und nicht davor.</p>`;
+  s+=`<div class="sec"><div class="list">`;
+  if(!act.length) s+=`<p class="muted small" style="padding:14px 0">Noch hängt nichts. Das erste Vorhaben ist eine Wahl aus sieben Vorlagen.</p>`;
+  act.forEach(v=>{const n=stage(v),r=calc(v),t=tplOf(v);
+    s+=`<button class="li" data-a="venture" data-id="${v.id}"><svg width="30" height="30" viewBox="0 0 30 30" aria-hidden="true"><path d="${shapePath(t.form,15,15,10)}" fill="var(--neben)"/></svg><span class="grow"><span class="t">${esc(v.name)}</span><span class="s">${t.n} · ${BAUTEILE[n-1].n} · ${r.gewinn>0?"etwa "+eur(r.jahrG)+" Gewinn im Jahr":"Rechnung offen"}</span></span><span class="chev"></span></button>`});
+  s+=`</div><button class="btn wide" data-a="sheet" data-id="neu" ${act.length>=MAX_AKTIV?"disabled":""}>Neues Vorhaben aufhängen</button>${act.length>=MAX_AKTIV?`<p class="muted small">Drei Vorhaben hängen. Übergib eines, bevor ein neues dazukommt.</p>`:""}</div>`;
+  if(done.length){s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Weitergegeben</span></div><div class="list">`;
+    done.forEach(v=>{s+=`<button class="li" data-a="venture" data-id="${v.id}"><span class="dot" style="--c:var(--faint)"></span><span class="grow"><span class="t">${esc(v.name)}</span><span class="s">${dateDE(v.exit.d)} · ${v.exit.art==="einstellen"?"eingestellt":"für "+eur(n0(v.exit.preis))+" übergeben"}</span></span><span class="chev"></span></button>`});
+    s+=`</div></div>`}
+  const ju=jahresUmsatzAlle(), jg=jahresGewinnAlle();
+  if(act.length){s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Alle Vorhaben zusammen</span></div><div class="figs">
+    <button class="fig" data-a="explain" data-id="umsatz"><span class="k">Umsatz im Jahr</span><span class="v num">${eur(ju)}</span><span class="e">${ju<RECHT.kuVorjahr?"unter der Kleinunternehmergrenze":"über 25.000 €, Kleinunternehmerregelung prüfen"}</span></button>
+    <button class="fig" data-a="explain" data-id="gewinn"><span class="k">Gewinn im Jahr</span><span class="v num ${jg<0?"neg":""}">${eur(jg)}</span><span class="e">vor Einkommensteuer</span></button></div></div>`}
+  s+=wissenHTML("geld","Grundlagen zum Geld");
+  return s+foot();
+}
+function wissenHTML(ber,title){
+  const w=WISSEN.filter(x=>x.bereich===ber||(ber==="leben"&&x.bereich==="sinn"));
+  return`<div class="sec"><div class="wirehead"><span class="eyebrow">${title}</span></div><div class="list">${w.map(x=>`<button class="li" data-a="sheet" data-id="wissen" data-wid="${x.id}"><span class="grow"><span class="t">${esc(x.t)}</span><span class="s">${esc(x.src)} ${evHTML(x.ev)}</span></span><span class="chev"></span></button>`).join("")}</div></div>`;
+}
+function evHTML(n){return`<span class="ev" aria-label="Belegstärke ${n} von 3">${[1,2,3].map(i=>`<i class="${i<=n?"on":""}"></i>`).join("")}</span>`}
+
+function viewAmt(){
+  const act=aktive(), l=LAENDER.find(x=>x.id===S.prof.land);
+  let s=`<h2 style="margin-top:12px">Ämter und Pflichten</h2><p class="muted small">Was für deine Vorhaben nötig ist, abgeleitet aus Bundesland, Hauptberuf und Vorlage. Abhaken kannst du auch direkt hier.</p>`;
+  if(!S.prof.land) s+=`<div class="sec"><button class="btn" data-a="sheet" data-id="profil">Zuerst den Rahmen festlegen</button></div>`;
+  if(l){s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">${esc(l.n)}</span></div><div class="card flat"><p class="small">Landesrecht betrifft dich vor allem bei Feiertagen, Ausschank, Sonn- und Feiertagsverkauf${S.prof.beruf==="beamt"?" und beim Nebentätigkeitsrecht für Beamte":""}.</p><p class="small muted">Zusätzliche Feiertage in ${esc(l.n)}: ${l.ft.map(esc).join(", ")}. An diesen Tagen sind Märkte oft geschlossen, und Saisonhilfen zählen den Tag mit, wenn er eigentlich ein Arbeitstag gewesen wäre.</p>${act[0]?`<div><button class="btn small ghost" data-a="auftrag" data-id="${act[0].id}" data-task="a_land">Landesregeln prüfen lassen</button></div>`:""}</div></div>`}
+  if(!act.length){s+=`<p class="muted small" style="margin-top:20px">Sobald ein Vorhaben hängt, erscheinen hier seine Pflichtschritte.</p>`;return s+foot()}
+  const seen=new Set();
+  ["vor","team","laufend","exit"].forEach(w=>{
+    let rows="";
+    act.forEach(v=>dutiesFor(v).filter(d=>d.w===w).forEach(d=>{
+      const k=PERSON.has(d.id)?d.id:v.id+d.id; if(seen.has(k)) return; seen.add(k);
+      rows+=dutyRow(v,d,!PERSON.has(d.id)&&act.length>1);
+    }));
+    if(rows) s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">${PFLICHT_PHASEN[w]}</span></div><div>${rows}</div></div>`;
+  });
+  s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Formulare vorbereitet</span></div><div class="list">${act.filter(v=>!tplOf(v).f.kurs).map(v=>`<button class="li" data-a="sheet" data-id="form" data-form="gewa" data-vid="${v.id}"><span class="grow"><span class="t">Gewerbeanmeldung</span><span class="s">${esc(v.name)}</span></span><span class="chev"></span></button>`).join("")}<button class="li" data-a="sheet" data-id="form" data-form="fse" data-vid="${act[0].id}"><span class="grow"><span class="t">Fragebogen zur steuerlichen Erfassung</span><span class="s">für alle Vorhaben zusammen</span></span><span class="chev"></span></button></div></div>`;
+  return s+foot();
+}
+function dutyRow(v,d,showName){
+  const on=dutyDone(v,d), key="d-"+v.id+"-"+d.id;
+  return`<div class="duty"><button class="check" data-a="duty" data-id="${v.id}" data-duty="${d.id}" aria-pressed="${on}" aria-label="${esc(d.t)} erledigt">${ICON.check}</button><div><p class="wer">${esc(d.wer)}${showName?" · "+esc(v.name):""}</p><p class="t">${esc(d.t)}</p></div>
+  <details data-key="${key}" ${OPEN.has(key)?"open":""}><summary>Warum und wie</summary><p>${esc(fill(d.x,v))}</p><p style="margin-top:6px"><strong>So geht’s:</strong> ${esc(fill(d.wie,v))}</p><div class="acts">${d.link?`<a class="linkbtn" href="${d.link}" target="_blank" rel="noopener">${esc(d.link.replace(/^https:\/\//,""))}</a>`:""}${d.auftrag?`<button class="btn small ghost" data-a="auftrag" data-id="${v.id}" data-task="${d.auftrag}">Claude beauftragen</button>`:""}${d.form?`<button class="btn small ghost" data-a="sheet" data-id="form" data-form="${d.form}" data-vid="${v.id}">Formularwerte</button>`:""}</div>${on?`<p class="mono" style="margin-top:6px">erledigt am ${dateDE(PERSON.has(d.id)?S.pduties[d.id]:v.duties[d.id])}</p>`:""}</details></div>`;
+}
+const OPEN=new Set();
+
+function viewLeben(){
+  const b=balance(), wm=weekMin();
+  let s=`<h2 style="margin-top:12px">Leben</h2><p class="muted small">Die linke Seite des Mobiles. Sie zieht mit, und sie soll schwerer wiegen als die Vorhaben.</p>`;
+  s+=`<div class="sec"><div class="figs"><button class="fig" data-a="explain" data-id="zeit"><span class="k">Steuerzeit diese Woche</span><span class="v num">${(wm/60).toLocaleString("de-DE",{maximumFractionDigits:1})} / ${S.prof.stunden} Std.</span><span class="bar" style="--c:${b.load>1?"var(--leben)":"var(--neben)"}"><i style="width:${clamp(b.load*100,0,100)}%"></i></span></button>
+  <button class="fig" data-a="explain" data-id="menschen"><span class="k">Menschen gesehen</span><span class="v num">${S.people.length?S.people.filter(p=>p.last&&dayDiff(p.last,today())<=14).length+" / "+S.people.length:"–"}</span><span class="e">in den letzten 14 Tagen</span></button></div></div>`;
+  s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Nahe Menschen</span></div><p class="muted small">Tipp auf einen Namen, wenn du heute mit dem Menschen Zeit hattest.</p><div class="people">${S.people.map(p=>{const st=!p.last||dayDiff(p.last,today())>14;return`<button class="person ${st?"stale":""}" data-a="seen" data-id="${p.id}" aria-label="${esc(p.name)}, zuletzt ${agoTxt(p.last)}"><span class="av">${esc(p.name.slice(0,1).toUpperCase())}</span>${esc(p.name)} <span class="ago">${agoTxt(p.last)}</span></button>`}).join("")}<button class="chip" data-a="sheet" data-id="people">${S.people.length?"Bearbeiten":"Menschen eintragen"}</button></div></div>`;
+  s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Deine Steuertage</span></div><p class="muted small">Nur an diesen Tagen schlägt die App Schritte für die Vorhaben vor. An allen anderen Tagen ist Leben dran.</p><div class="chips">${[1,2,3,4,5,6,0].map(d=>`<button class="chip" data-a="tag" data-id="${d}" data-key="tag${d}" aria-pressed="${S.prof.tage.includes(d)}">${WT[d]}</button>`).join("")}</div>
+  <div class="field"><span class="lab">Stunden pro Woche für alle Vorhaben</span><div class="chips">${[1,2,3,4,6,8].map(h=>`<button class="chip" data-a="std" data-id="${h}" data-key="std${h}" aria-pressed="${S.prof.stunden==h}">${h}</button>`).join("")}</div></div></div>`;
+  s+=`<div class="sec"><div class="chips"><button class="btn sinn" data-a="sheet" data-id="week">Wochenblick</button><button class="btn ghost" data-a="sheet" data-id="time">Steuerzeit eintragen</button></div>${S.weeks.length?`<p class="muted small">Letzter Wochenblick ${agoTxt(S.weeks[S.weeks.length-1].d)}: ${esc({gab:"Die Vorhaben haben Kraft gegeben.",neutral:"Weder noch.",nahm:"Die Vorhaben haben Kraft genommen."}[S.weeks[S.weeks.length-1].kraft]||"")}${S.weeks[S.weeks.length-1].weg?" Weglassen: „"+esc(S.weeks[S.weeks.length-1].weg)+"“":""}</p>`:""}</div>`;
+  s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Deine Werte</span></div>${S.werte.length?`<div class="chips">${S.werte.map(w=>`<span class="pill ok">${esc(w)}</span>`).join("")}</div>`:`<p class="muted small">Noch keine. Trag bis zu fünf Werte ein, zum Beispiel aus deinem Wertegerüst.</p>`}<div><button class="btn small ghost" data-a="sheet" data-id="werte">Werte eintragen</button></div></div>`;
+  s+=appLinks();
+  s+=wissenHTML("leben","Warum die Lebensseite schwerer wiegt");
+  return s+foot();
+}
+function appLinks(){
+  const a=S.settings.apps;
+  return`<div class="sec"><div class="wirehead"><span class="eyebrow">Deine anderen Apps</span></div><div class="list">
+  <a class="li" href="${esc(a.wg)}" target="_blank" rel="noopener"><span class="dot" style="--c:var(--neben)"></span><span class="grow"><span class="t">Wertegerüst</span><span class="s">Werte finden und verankern. Die Werte prüfen hier jedes Vorhaben.</span></span><span class="chev"></span></a>
+  <a class="li" href="${esc(a.bt)}" target="_blank" rel="noopener"><span class="dot" style="--c:var(--sinn)"></span><span class="grow"><span class="t">Biotop</span><span class="s">Nachhaltiger leben. Hier fließt es in den Nachhaltigkeitsblick jedes Vorhabens.</span></span><span class="chev"></span></a>
+  <a class="li" href="${esc(a.gk)}" target="_blank" rel="noopener"><span class="dot" style="--c:var(--geld)"></span><span class="grow"><span class="t">Glückskompass</span><span class="s">Glücksforschung zum Ausprobieren. Hier fragt die App nach jeder Steuerzeit, ob sie dir gutgetan hat.</span></span><span class="chev"></span></a></div></div>`;
+}
+
+/* ---------- Bögen ---------- */
+let SH=null; // {id, ...opts}
+function openSheet(id,o={}){
+  const wasOpen=!!SH; SH={id,...o};
+  if(!wasOpen){ lastFocus=document.activeElement; try{history.pushState({sheet:1},"")}catch(e){} }
+  renderSheet(true);
+}
+let lastFocus=null;
+function closeSheet(fromPop){
+  if(!SH) return; SH=null;
+  const sh=$("#sheet"), sc=$("#scrim"); sh.classList.remove("on"); sc.classList.remove("on");
+  setTimeout(()=>{if(!SH){sh.hidden=true;sc.hidden=true;sh.querySelector(".sbody").innerHTML=""}},330);
+  document.documentElement.style.overflow="";
+  if(!fromPop){try{if(history.state&&history.state.sheet) history.back()}catch(e){}}
+  render(); if(lastFocus&&lastFocus.isConnected) lastFocus.focus();
+  setTimeout(showMoment,900);
+}
+function renderSheet(first){
+  const sh=$("#sheet"), sc=$("#scrim"), body=sh.querySelector(".sbody");
+  const fn=SHEETS[SH.id]; if(!fn){closeSheet();return}
+  const st=body.scrollTop;
+  body.innerHTML=fn(SH);
+  sh.setAttribute("aria-label",(body.querySelector("h2")||{}).textContent||"Bogen");
+  if(first){ sh.hidden=false; sc.hidden=false; body.scrollTop=0; document.documentElement.style.overflow="hidden";
+    requestAnimationFrame(()=>{sh.classList.add("on");sc.classList.add("on");const c=body.querySelector(".closebtn");if(c)c.focus({preventScroll:true})}) }
+  else body.scrollTop=st;
+  afterRender();
+}
+const head=(ey,t,c)=>`<div class="shead"><div class="grow"><p class="eyebrow"><span class="knot" style="--c:${c||"var(--neben)"}"></span>${esc(ey)}</p><h2>${esc(t)}</h2></div><button class="closebtn" data-a="close">Schließen</button></div>`;
+
+const SHEETS={
+  welcome(){return`${head("Willkommen","Eine Nebenexistenz, die neben dem Leben bleibt")}
+    <p>Die App hilft dir, nebenher kleine, legale Gewerbe aufzubauen, die andere für dich führen. Du steuerst, die Arbeit verteilt sich.</p>
+    <div class="timeline"><div class="tl on"><span class="t">Rahmen festlegen</span><span class="muted small">Bundesland, Hauptberuf, Geld und Zeit. Daraus folgen Pflichten und ein Startgeld-Deckel.</span></div>
+    <div class="tl on"><span class="t">Vorhaben aufhängen</span><span class="muted small">Jedes Vorhaben wächst in sieben Bauteilen: wählen, prüfen, anmelden, ausgestalten, übertragen, erproben, tragen. Anmeldungen und Formulare sind vorbereitet, Recherchen und Texte übernimmt Claude per Knopfdruck.</span></div>
+    <div class="tl on"><span class="t">Weitergeben</span><span class="muted small">Wenn ein Vorhaben sich trägt, schlägt die App vor, es zu verkaufen. Es bleibt im Bild sichtbar.</span></div></div>
+    <div class="note leben"><span>Die linke Seite des Mobiles ist dein Leben. Wenn die Vorhaben zu schwer werden, neigt es sich. An Tagen ohne Steuerzeit schlägt die App nur Schritte für das Leben vor.</span></div>
+    <div class="stack"><button class="btn wide" data-a="welcomeGo">Rahmen festlegen</button><button class="btn ghost wide" data-a="demoOn">Mit Beispiel umsehen</button></div>
+    <p class="muted small">Ohne Konto, ohne Server, ohne Benachrichtigungen. Alles bleibt auf deinem Gerät.</p>`},
+
+  profil(){const p=S.prof,r=rahmen();
+    return`${head("Rahmen","Dein Rahmen")}
+    <div class="field"><label for="f-land">Bundesland, in dem du steuerlich gemeldet bist</label><select id="f-land" data-bind="prof.land"><option value="">Bitte wählen</option>${LAENDER.map(l=>`<option value="${l.id}" ${p.land===l.id?"selected":""}>${l.n}</option>`).join("")}</select></div>
+    <div class="field"><label for="f-ort">Ort oder Region</label><input id="f-ort" type="text" data-bind="prof.ort" value="${esc(p.ort)}" placeholder="zum Beispiel Leipzig"><span class="hint">Nur für die Aufträge an Claude, damit Recherchen in deiner Gegend suchen. Keine Adresse nötig.</span></div>
+    <div class="field"><span class="lab">Hauptberuf</span><div class="chips">${BERUFE.map(b=>`<button class="chip" data-a="beruf" data-id="${b.id}" data-key="ber${b.id}" aria-pressed="${p.beruf===b.id}">${b.n}</button>`).join("")}</div></div>
+    <div class="grid2"><div class="field"><label for="f-netto">Netto im Monat</label><div class="suffix"><input id="f-netto" type="number" inputmode="decimal" data-bind="prof.netto" value="${p.netto||""}"><span>€</span></div></div>
+    <div class="field"><label for="f-fix">Feste Ausgaben</label><div class="suffix"><input id="f-fix" type="number" inputmode="decimal" data-bind="prof.fix" value="${p.fix||""}"><span>€</span></div></div></div>
+    <div class="field"><label for="f-rl">Rücklagen gesamt</label><div class="suffix"><input id="f-rl" type="number" inputmode="decimal" data-bind="prof.ruecklage" value="${p.ruecklage||""}"><span>€</span></div></div>
+    <div id="rahmenOut">${rahmenOut()}</div>
+    <button class="btn wide" data-a="profilSave">Speichern</button>`},
+
+  neu(){return`${head("Neues Vorhaben","Was soll nebenher laufen?")}
+    <p class="muted small">Jede Vorlage bringt eigene Pflichtschritte, Startwerte für die Rechnung und passende Aufträge mit. Du gibst ihr gleich einen eigenen Namen.</p>
+    <div class="stack">${VORLAGEN.map(t=>`<button class="card" data-a="pickTpl" data-id="${t.id}"><span style="display:flex;gap:12px;align-items:center"><svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><path d="${shapePath(t.form,17,17,11)}" fill="var(--neben)"/></svg><span><span class="t" style="font:650 17px/1.25 var(--f-ui);display:block">${esc(t.n)}</span><span class="mono">Start etwa ${eur(t.start[0])} bis ${eur(t.start[1])}</span></span></span><span class="small">${esc(t.kurz)}</span><span class="small muted">${esc(t.bsp)}</span></button>`).join("")}</div>`},
+
+  name(o){const t=VORLAGEN.find(x=>x.id===o.tpl);
+    return`${head(t.n,"Wie heißt es?")}<div class="field"><label for="f-vname">Name des Vorhabens</label><input id="f-vname" type="text" value="" placeholder="zum Beispiel Wachs & Docht" maxlength="40"></div>
+    <div class="field"><label for="f-vdesc">In einem Satz</label><input id="f-vdesc" type="text" value="" placeholder="${esc(t.bsp.replace("Zum Beispiel ",""))}" maxlength="140"><span class="hint">Dieser Satz geht in die Aufträge an Claude.</span></div>
+    <button class="btn wide" data-a="createV" data-id="${t.id}">Aufhängen</button>`},
+
+  venture(o){const v=vById(o.vid); if(!v) return"";
+    const t=tplOf(v), n=stage(v), sub=o.sub||"bauteile";
+    const tabs=[["bauteile","Bauteile"],["rechnung","Rechnung"],["pflichten","Pflichten"],["auftraege","Aufträge"],["team","Team"],["laeufe","Läufe"],["uebergabe","Übergabe"]];
+    let s=`${head(t.n+(v.exit?" · weitergegeben":""),v.name)}<div class="parts" aria-label="${n} von 7 Bauteilen">${BAUTEILE.map((b,i)=>`<i class="part ${i<n?"on":i===n?"nx":""}"></i>`).join("")}</div>
+    <div class="seg" role="tablist">${tabs.map(([k,l])=>`<button role="tab" data-a="sub" data-id="${k}" aria-current="${sub===k}">${l}</button>`).join("")}</div>`;
+    return s+VSUB[sub](v);
+  },
+
+  auftrag(o){const v=vById(o.vid), a=AUFTRAEGE.find(x=>x.id===o.task), pr=promptFor(v,o.task);
+    const res=v.results.filter(r=>r.task===a.id);
+    return`${head("Auftrag an Claude",a.t)}
+    <p class="muted small">Der Auftrag ist schon mit deinem Vorhaben gefüllt. Er enthält keinen Namen und kein Vermögen. Du kannst ihn vorher ändern.</p>
+    <textarea id="f-prompt" aria-label="Auftragstext">${esc(pr)}</textarea>
+    <div class="chips"><a class="btn" id="claudeGo" href="https://claude.ai/new?q=${encodeURIComponent(pr)}" target="_blank" rel="noopener" data-a="claudeGo">In Claude öffnen</a><button class="btn ghost" data-a="copy" data-src="f-prompt">Kopieren</button></div>
+    <div class="wirehead" style="margin-top:6px"><span class="eyebrow">Ergebnis ablegen</span></div>
+    <p class="muted small">Füge die Antwort von Claude hier ein. Sie bleibt beim Vorhaben.${a.out==="prod"?" Ein Konzept hier zählt als Bauteil „Ausgestaltet“.":""}</p>
+    <textarea id="f-result" aria-label="Ergebnis" placeholder="Antwort einfügen"></textarea>
+    <button class="btn wide sinn" data-a="saveResult" data-id="${v.id}" data-task="${a.id}">Ablegen</button>
+    ${res.length?`<div class="list">${res.map(r=>`<details class="li" style="display:block"><summary class="t">${dateDE(r.d)}</summary><pre class="prompt">${esc(r.text)}</pre></details>`).join("")}</div>`:""}`},
+
+  form(o){const v=vById(o.vid); const rows=o.form==="gewa"?gewaRows(v):fseRows();
+    return`${head(o.form==="gewa"?"Formular":"Formular",o.form==="gewa"?"Gewerbeanmeldung":"Fragebogen zur steuerlichen Erfassung")}
+    <p class="muted small">${o.form==="gewa"?"Die Angaben für das Formular GewA 1, vorbereitet aus deinem Vorhaben. Persönliche Daten wie Anschrift und Ausweis trägst du im Portal selbst ein.":"Die wichtigsten Angaben für ELSTER, berechnet aus der Rechnung aller Vorhaben. Prüfe jede Zahl, bevor du sie überträgst."}</p>
+    <div>${rows.map((r,i)=>`<div class="formrow"><div><p class="k">${esc(r[0])}</p><p class="v" id="fv${i}">${esc(r[1])}</p>${r[2]?`<p class="muted small">${esc(r[2])}</p>`:""}</div><button class="btn small ghost" data-a="copy" data-src="fv${i}">Kopieren</button></div>`).join("")}</div>
+    ${o.form==="gewa"?`<button class="btn ghost wide" data-a="auftrag" data-id="${v.id}" data-task="a_amt">Zuständiges Amt finden lassen</button>`:`<a class="btn ghost wide" href="https://www.elster.de" target="_blank" rel="noopener">Zu ELSTER</a>`}`},
+
+  time(o){const act=aktive(); const vid=o.vid||(act[0]&&act[0].id)||"";
+    return`${head("Steuerzeit","Zeit für die Vorhaben eintragen","var(--neben)")}
+    <p class="muted small">Was du für die Vorhaben tust, zählt hier: Mails, Absprachen, Aufträge. Daraus entsteht das Gleichgewicht im Mobile.</p>
+    ${act.length?`<div class="field"><span class="lab">Für welches Vorhaben?</span><div class="chips">${act.map(v=>`<button class="chip" data-a="tvid" data-id="${v.id}" data-key="tv${v.id}" aria-pressed="${vid===v.id}">${esc(v.name)}</button>`).join("")}</div></div>`:""}
+    <div class="field"><span class="lab">Wie lange?</span><div class="chips">${[15,30,45,60,90,120].map(m=>`<button class="chip" data-a="tmin" data-id="${m}" data-key="tm${m}" aria-pressed="${SH.min==m}">${m<60?m+" Min.":(m/60).toLocaleString("de-DE")+" Std."}</button>`).join("")}</div></div>
+    <div class="field"><span class="lab">Hat dir das gutgetan?</span><div class="scale">${[1,2,3,4,5].map(m=>`<button class="chip" data-a="tmood" data-id="${m}" data-key="mo${m}" aria-pressed="${SH.mood==m}" aria-label="${m} von 5">${m}</button>`).join("")}</div><span class="hint">1 heißt gar nicht, 5 sehr. Die Frage stammt aus dem Glückskompass: Was dir nicht guttut, darfst du abgeben.</span></div>
+    <button class="btn wide" data-a="saveTime" data-vid="${vid}" ${SH.min?"":"disabled"}>Eintragen</button>`},
+
+  run(o){const v=vById(o.vid), r=calc(v), t=tplOf(v);
+    return`${head(v.name,"Einen "+t.lauf+" abrechnen")}
+    <p class="muted small">Die Felder sind mit der Rechnung vorbelegt. Trag ein, was wirklich war.</p>
+    <div class="field"><label for="r-d">Datum</label><input id="r-d" type="date" value="${today()}"></div>
+    <div class="grid2"><div class="field"><label for="r-u">Umsatz</label><div class="suffix"><input id="r-u" type="number" inputmode="decimal" value="${Math.round(r.umsatz)}"><span>€</span></div></div>
+    <div class="field"><label for="r-k">Kosten gesamt</label><div class="suffix"><input id="r-k" type="number" inputmode="decimal" value="${Math.round(r.kosten)}"><span>€</span></div></div>
+    <div class="field"><label for="r-m">Deine Stunden</label><div class="suffix"><input id="r-m" type="number" inputmode="decimal" value="${n0(v.calc.meineStd)}"><span>Std.</span></div></div>
+    <div class="field"><label for="r-t">Team-Stunden</label><div class="suffix"><input id="r-t" type="number" inputmode="decimal" value="${n0(v.calc.teamStd)}"><span>Std.</span></div></div></div>
+    <div class="field"><label for="r-n">Notiz</label><input id="r-n" type="text" placeholder="Was lief gut, was nicht?"></div>
+    <button class="btn wide" data-a="saveRun" data-id="${v.id}">Abrechnen</button>`},
+
+  member(o){const v=vById(o.vid);
+    return`${head(v.name,"Jemand führt den Alltag")}
+    <div class="field"><label for="m-n">Name oder Rolle</label><input id="m-n" type="text" placeholder="zum Beispiel Standleitung Jana"></div>
+    <div class="field"><span class="lab">Beschäftigung</span><div class="chips">${[["kurz","Kurzfristig (Saison)"],["mini","Minijob"],["frei","Selbstständig"]].map(([k,l])=>`<button class="chip" data-a="mform" data-id="${k}" data-key="mf${k}" aria-pressed="${(SH.form||"kurz")===k}">${l}</button>`).join("")}</div>
+    <span class="hint">${(SH.form||"kurz")==="kurz"?"Bis drei Monate oder "+RECHT.kurzTage+" Arbeitstage im Jahr, ohne Sozialabgaben. Passt zur Weihnachtsmarktsaison.":(SH.form==="mini")?"Bis "+RECHT.minijob+" € im Monat, rund "+RECHT.minijobAbgabe+" % Pauschalabgaben für dich.":"Nur, wenn die Person wirklich frei ist: eigene Zeiten, eigene Mittel, mehrere Auftraggeber. Sonst droht Scheinselbstständigkeit."}</span></div>
+    <div class="field"><label for="m-l">Stundenlohn</label><div class="suffix"><input id="m-l" type="number" inputmode="decimal" value="${Math.max(RECHT.mindestlohn,n0(v.calc.lohn))}"><span>€</span></div><span class="hint">Mindestlohn ${fill("{ml}")} €. Für die Standleitung, die Verantwortung trägt, ist mehr angemessen.</span></div>
+    <button class="btn wide" data-a="saveMember" data-id="${v.id}">Hinzufügen</button>`},
+
+  people(){return`${head("Leben","Nahe Menschen","var(--leben)")}
+    <p class="muted small">Bis zu sechs Menschen, die dir wichtig sind. Nur Vornamen, nur auf deinem Gerät.</p>
+    <div class="list">${S.people.map(p=>`<div class="li" style="cursor:default"><span class="grow"><span class="t">${esc(p.name)}</span><span class="s">zuletzt ${agoTxt(p.last)}</span></span><button class="btn small ghost" data-a="delPerson" data-id="${p.id}">Entfernen</button></div>`).join("")}</div>
+    ${S.people.length<6?`<div class="field"><label for="p-n">Neuer Name</label><input id="p-n" type="text" maxlength="24" placeholder="zum Beispiel Mama, Jonas"></div><button class="btn wide leben" data-a="addPerson">Hinzufügen</button>`:""}`},
+
+  werte(){return`${head("Werte","Deine Werte","var(--sinn)")}
+    <p class="muted small">Bis zu fünf Werte. Jedes Vorhaben fragt dich, ob es zu ihnen passt. Wenn du das Wertegerüst nutzt, trag hier deine Stützen ein.</p>
+    <div class="chips">${S.werte.map((w,i)=>`<button class="chip" data-a="delWert" data-id="${i}" aria-label="${esc(w)} entfernen">${esc(w)} ✕</button>`).join("")}</div>
+    ${S.werte.length<5?`<div class="field"><label for="w-n">Neuer Wert</label><input id="w-n" type="text" maxlength="24" placeholder="zum Beispiel Gerechtigkeit"></div><button class="btn wide sinn" data-a="addWert">Hinzufügen</button>`:""}
+    <a class="linkbtn" href="${esc(S.settings.apps.wg)}" target="_blank" rel="noopener">Im Wertegerüst vertiefen</a>`},
+
+  week(){const w=SH.w||(SH.w={kraft:"",weg:"",mit:[]});
+    return`${head("Wochenblick","Wie war die Woche?","var(--sinn)")}
+    <div class="field"><span class="lab">Mit wem hattest du diese Woche Zeit?</span><div class="chips">${S.people.map(p=>`<button class="chip" data-a="wmit" data-id="${p.id}" data-key="wm${p.id}" aria-pressed="${w.mit.includes(p.id)}" style="--c:var(--leben)">${esc(p.name)}</button>`).join("")||`<span class="muted small">Noch keine Menschen eingetragen.</span>`}</div></div>
+    <div class="field"><span class="lab">Haben die Vorhaben dir Kraft gegeben oder genommen?</span><div class="chips">${[["gab","gegeben"],["neutral","weder noch"],["nahm","genommen"]].map(([k,l])=>`<button class="chip" data-a="wkraft" data-id="${k}" data-key="wk${k}" aria-pressed="${w.kraft===k}">${l}</button>`).join("")}</div></div>
+    <div class="field"><label for="w-weg">Was lässt du nächste Woche weg?</label><input id="w-weg" type="text" value="${esc(w.weg)}" placeholder="zum Beispiel abends Mails beantworten"></div>
+    <button class="btn wide sinn" data-a="saveWeek" ${w.kraft?"":"disabled"}>Abschließen</button>
+    <a class="linkbtn" href="${esc(S.settings.apps.gk)}" target="_blank" rel="noopener">Ein passendes Experiment im Glückskompass suchen</a>`},
+
+  wissen(o){const w=WISSEN.find(x=>x.id===o.wid);
+    return`${head("Wissen · Belegstärke "+w.ev+" von 3",w.t,w.bereich==="geld"?"var(--geld)":"var(--leben)")}<p>${esc(w.x)}</p><div class="note"><span>${esc(w.c)}</span></div><p class="small muted">Quelle: <a href="${esc(w.u)}" target="_blank" rel="noopener">${esc(w.src)}</a></p>`},
+
+  explain(o){const T={
+      umsatz:["Umsatz im Jahr","Preis mal Stückzahl mal Läufe pro Jahr, für alle aktiven Vorhaben zusammen. Für die Kleinunternehmerregelung zählt der Nettoumsatz aller Tätigkeiten unter deinem Namen. Grenze im Vorjahr "+RECHT.kuVorjahr.toLocaleString("de-DE")+" €, im laufenden Jahr "+RECHT.kuLaufend.toLocaleString("de-DE")+" €."],
+      gewinn:["Gewinn im Jahr","Umsatz minus Ware, Stand, Team mit Abgaben und Fixkosten, mal Läufe pro Jahr. Startkosten sind nicht abgezogen. Der Gewinn kommt zu deinem Einkommen und wird mit deinem persönlichen Steuersatz besteuert. Lege grob ein Viertel davon zurück."],
+      zeit:["Steuerzeit","Alles, was du selbst für die Vorhaben tust, in den letzten sieben Tagen. Dein Rahmen sind "+S.prof.stunden+" Stunden pro Woche. Liegt die Zeit darüber, neigt sich das Mobile zu den Vorhaben."],
+      menschen:["Menschen gesehen","Wie viele deiner nahen Menschen du in den letzten 14 Tagen eingetragen hast. Weniger als die Hälfte lässt das Mobile zu den Vorhaben kippen."],
+      deckel:["Startgeld-Deckel","Vom Rücklagen-Betrag ziehen wir drei Monate feste Ausgaben als Notgroschen ab. Vom Rest schlagen wir höchstens 15 Prozent pro Vorhaben vor. Das ist eine Faustregel zur Vorsicht, keine Anlageberatung."]
+    }[o.eid];
+    return`${head("Erklärt",T[0])}<p>${esc(T[1])}</p>`},
+
+  settings(){const st=S.settings;
+    return`${head("Einstellungen","Einstellungen")}
+    <div class="field"><span class="lab">Darstellung</span><div class="chips">${[["auto","Wie das Gerät"],["light","Hell"],["dark","Dunkel"]].map(([k,l])=>`<button class="chip" data-a="theme" data-id="${k}" data-key="th${k}" aria-pressed="${st.theme===k}">${l}</button>`).join("")}</div></div>
+    <div class="field"><span class="lab">Vibration beim Tippen</span><div class="chips"><button class="chip" data-a="vib" data-key="vib" aria-pressed="${st.vib}">${st.vib?"An":"Aus"}</button></div></div>
+    <div class="stack"><button class="btn ghost" data-a="sheet" data-id="profil">Rahmen bearbeiten</button><button class="btn ghost" data-a="sheet" data-id="people">Menschen bearbeiten</button><button class="btn ghost" data-a="sheet" data-id="werte">Werte bearbeiten</button></div>
+    <div class="wirehead"><span class="eyebrow">Adressen deiner anderen Apps</span></div>
+    ${[["wg","Wertegerüst"],["bt","Biotop"],["gk","Glückskompass"]].map(([k,l])=>`<div class="field"><label for="ap-${k}">${l}</label><input id="ap-${k}" type="text" data-bind="settings.apps.${k}" value="${esc(st.apps[k])}"></div>`).join("")}
+    <div class="wirehead"><span class="eyebrow">Datensicherung</span></div>
+    <p class="muted small">Safari löscht Daten von Webseiten, die lange nicht geöffnet wurden. Füge die App zum Home-Bildschirm hinzu und sichere ab und zu.</p>
+    <div class="chips"><button class="btn ghost small" data-a="export">Sicherung kopieren</button>${IN_FRAME?"":`<button class="btn ghost small" data-a="exportFile">Als Datei sichern</button>`}<button class="btn ghost small" data-a="sheet" data-id="import">Sicherung laden</button></div>
+    <div class="wirehead"><span class="eyebrow">Neu anfangen</span></div>
+    <div class="chips">${S.demo?`<button class="btn ghost small" data-a="demoOff">Beispiel löschen</button>`:`<button class="btn ghost small" data-a="demoOn">Beispiel laden</button>`}<button class="btn ghost small" data-a="reset1">Alles löschen</button></div>
+    ${SH.reset?`<div class="note leben"><strong>Wirklich alles löschen?</strong><span>Rahmen, Vorhaben, Menschen und Verlauf gehen verloren. Das lässt sich nicht rückgängig machen.</span><div><button class="btn leben small" data-a="reset2">Ja, alles löschen</button></div></div>`:""}
+    <p class="muted small">Nebenexistenz · Stand ${esc(BUILD)} · Rechtsstand ${RECHT.stand}. Die App erklärt und bereitet vor. Sie ersetzt keine Steuer- oder Rechtsberatung. © Carlo Maximilian Engeländer. Alle Rechte vorbehalten.</p>`},
+
+  exportv(){return`${head("Sicherung","Sicherung kopieren")}<p class="muted small">Kopiere den Text und bewahre ihn an einem sicheren Ort auf, zum Beispiel in einer Notiz.</p><textarea id="f-exp" readonly>${esc(JSON.stringify(S))}</textarea><button class="btn wide" data-a="copy" data-src="f-exp">Kopieren</button>`},
+  import(){return`${head("Sicherung","Sicherung laden")}<p class="muted small">Füge eine Sicherung ein oder wähle eine Datei. Der jetzige Stand wird ersetzt.</p><textarea id="f-imp" placeholder="Sicherung einfügen"></textarea><input type="file" id="f-impfile" accept=".json,application/json"><button class="btn wide" data-a="doImport">Laden</button>`},
+
+  moment(o){const M=MOMENTE[o.mid];
+    return`${head("Moment",M.t,"var(--geld)")}<p>${esc(M.x)}</p>${o.more&&o.more.length?`<p class="muted small">Auch neu: ${o.more.map(k=>MOMENTE[k].t).join(", ")}.</p>`:""}<button class="btn wide" data-a="close">Weiter</button>`}
+};
+const MOMENTE={
+  first:{t:"Das erste Vorhaben hängt.",x:"Es hängt rechts am Mobile. Jedes Bauteil, das dazukommt, erscheint als Punkt am Draht, und die Form wird größer."},
+  amt:{t:"Alles angemeldet.",x:"Die Pflichtschritte vor dem Start sind erledigt. Ab jetzt ist das Vorhaben legal und steuerlich erfasst."},
+  lauf:{t:"Der erste Lauf ist abgerechnet.",x:"Jetzt gibt es echte Zahlen statt Schätzungen. Vergleich sie mit der Rechnung und pass die Rechnung an."},
+  traegt:{t:"Es trägt sich.",x:"Zwei Läufe mit Gewinn, kaum eigene Zeit. Das ist eine Nebenexistenz im eigentlichen Sinn. Jetzt kannst du überlegen, es weiterzugeben."},
+  exit:{t:"Weitergegeben.",x:"Das Vorhaben gehört jetzt jemand anderem. Im Bild ruht es unten auf dem Boden, es verschwindet nicht."}
+};
+function rahmenOut(){const r=rahmen();
+  if(!r.gesetzt) return`<p class="muted small">Sobald du Zahlen einträgst, zeigt die App deinen Startgeld-Deckel.</p>`;
+  return`<div class="figs"><button class="fig" data-a="explain" data-id="deckel"><span class="k">Startgeld je Vorhaben</span><span class="v num">bis ${eur(r.deckel)}</span><span class="e">nach Notgroschen von ${eur(r.notgroschen)}</span></button><div class="fig"><span class="k">Monatlich frei</span><span class="v num ${r.monat<0?"neg":""}">${eur(r.monat)}</span><span class="e">Netto minus feste Ausgaben</span></div></div>`;
+}
+function gewaRows(v){const t=tplOf(v), f=t.f;
+  return[
+    ["Angemeldete Tätigkeit",t.taetig,"Möglichst genau, aber nicht zu eng. Unter dem Namen „"+v.name+"“."],
+    ["Art der Anmeldung","Neuerrichtung, Hauptniederlassung",aktive().length>1?"Führst du schon ein Gewerbe, reicht oft eine Ummeldung mit erweiterter Tätigkeit.":""],
+    ["Im Nebenerwerb","Ja",""],
+    ["Rechtsform","Einzelunternehmen",""],
+    ["Beginn",v.start?dateDE(v.start):"Datum, an dem du anfängst",""],
+    ["Beschäftigte","Vollzeit 0, Teilzeit "+v.team.filter(m=>m.form!=="frei").length,""],
+    ["Erlaubnis oder Eintrag",f.ausschank?"Für Ausschank ggf. Gestattung nach Landesrecht":f.handwerk?"Klären, ob Eintrag bei der Handwerkskammer nötig ist":"Keine erforderlich",""]
+  ];
+}
+function fseRows(){const ju=jahresUmsatzAlle(), jg=jahresGewinnAlle(), m=12-new Date().getMonth();
+  return[
+    ["Art der Tätigkeit","Gewerblich, Einzelunternehmen, nebenberuflich",""],
+    ["Gewinnermittlung","Einnahmenüberschussrechnung (EÜR)",""],
+    ["Umsatz im Eröffnungsjahr",eur(Math.round(ju*m/12/100)*100),"Grob anteilig für "+m+" Monate. Bei Saisonvorhaben lieber selbst schätzen."],
+    ["Umsatz im Folgejahr",eur(Math.round(ju/100)*100),""],
+    ["Gewinn im Eröffnungsjahr",eur(Math.round(jg*m/12/100)*100),""],
+    ["Gewinn im Folgejahr",eur(Math.round(jg/100)*100),""],
+    ["Kleinunternehmerregelung",ju<RECHT.kuVorjahr?"In Anspruch nehmen":"Eher nicht möglich",ju<RECHT.kuVorjahr?"Erwarteter Umsatz liegt unter "+RECHT.kuVorjahr.toLocaleString("de-DE")+" €. Bei Verkauf an Privatleute meist günstiger.":"Erwarteter Umsatz liegt über der Grenze."],
+    ["Andere Einkünfte","Aus deinem Hauptberuf, laut Lohnsteuerbescheinigung",""],
+    ["Steuerberatung","Keine, oder die Kanzlei eintragen",""]
+  ];
+}
+
+/* ---------- Unterseiten eines Vorhabens ---------- */
+const VSUB={
+  bauteile(v){const n=stage(v), c=stageChecks(v);
+    const next=v.exit?null:(n<7?ventureStep(v):null);
+    return`${next?`<div class="note neben"><strong>${esc(next.t)}</strong><span>${esc(next.x)}</span><div class="chips">${next.btns.map(b=>btnHTML({...b,c:(b.c||"")+" small"})).join("")}</div></div>`:""}
+    <div class="timeline">${BAUTEILE.map((b,i)=>`<div class="tl ${i<n?"on":""} ${i===n?"cur":""}"><span class="v">${b.verb}</span><span class="t">${b.n}</span><span class="muted small">${esc(b.x)}</span>${i>=n&&c[i]?`<span class="mono">schon erfüllt, wartet auf die Schritte davor</span>`:""}</div>`).join("")}</div>
+    <p class="muted small">${esc(v.desc||tplOf(v).kurz)}</p>
+    ${v.exit?"":`<button class="linkbtn" data-a="delV" data-id="${v.id}">Vorhaben abhängen und löschen</button>`}`},
+
+  rechnung(v){const c=v.calc,t=tplOf(v);
+    const F=(k,l,u,h)=>`<div class="field"><label for="c-${k}">${l}</label><div class="suffix"><input id="c-${k}" type="number" inputmode="decimal" step="any" data-bind="v.${v.id}.calc.${k}" value="${c[k]==null?"":c[k]}"><span>${u}</span></div>${h?`<span class="hint">${h}</span>`:""}</div>`;
+    return`<p class="muted small">Alles bezieht sich auf einen ${t.lauf}. Die Startwerte sind typisch für die Vorlage. Ändere sie auf deine Lage.</p>
+    <div class="grid2">${F("preis","Preis pro Stück","€")}${F("kosten","Kosten pro Stück","€")}${F("stueck","Stück pro "+t.lauf,"Stk.")}${F("stand",t.f.versand?"Plattform und Porto":"Stand oder Miete","€")}${F("lohn","Lohn Team","€/Std.")}${F("teamStd","Team-Stunden","Std.")}${F("meineStd","Deine Stunden","Std.")}${F("fix","Sonstiges","€")}${F("laeufe","Läufe pro Jahr","")}${F("start","Startkosten","€")}</div>
+    <div class="field"><span class="lab">Beschäftigung im Team</span><div class="chips">${[["kurz","Kurzfristig"],["mini","Minijob"],["keine","Kein Team"]].map(([k,l])=>`<button class="chip" data-a="cform" data-id="${k}" data-vid="${v.id}" data-key="cf${k}" aria-pressed="${(c.form||"kurz")===k}">${l}</button>`).join("")}</div></div>
+    <div id="calcOut">${calcOut(v)}</div>
+    ${v.passOk?`<p class="pill ok">Passung bestätigt am ${dateDE(v.passOk)}</p>`:""}
+    <div class="wirehead"><span class="eyebrow">Passung zu deinen Werten</span></div>${werteBlock(v)}
+    <div class="wirehead"><span class="eyebrow">Nachhaltigkeitsblick</span></div>${bioBlock(v)}
+    ${v.passOk?"":`<button class="btn wide" data-a="passOk" data-id="${v.id}">Passung bestätigen</button><p class="muted small">Damit sagst du: Ich habe Rechnung, Startgeld und Werte angesehen und will weitermachen.</p>`}
+    <button class="btn ghost wide" data-a="auftrag" data-id="${v.id}" data-task="a_kalk">Rechnung von Claude prüfen lassen</button>`},
+
+  pflichten(v){const ds=dutiesFor(v);
+    return`<p class="muted small">Abgeleitet aus ${esc(landN())}, deinem Hauptberuf und der Vorlage. Bauteil „Angemeldet“ gibt es, wenn alle Schritte vor dem Start erledigt sind.</p>`+
+    ["vor","team","laufend","exit"].map(w=>{const l=ds.filter(d=>d.w===w);return l.length?`<div class="wirehead"><span class="eyebrow">${PFLICHT_PHASEN[w]}</span></div><div>${l.map(d=>dutyRow(v,d,false)).join("")}</div>`:""}).join("")+
+    (tplOf(v).f.kurs?"":`<button class="btn ghost wide" data-a="sheet" data-id="form" data-form="gewa" data-vid="${v.id}">Gewerbeanmeldung vorbereitet</button>`)},
+
+  auftraege(v){const f=tplOf(v).f, list=AUFTRAEGE.filter(a=>!a.f||f[a.f]);
+    const grp={pass:"Prüfen",amt:"Anmelden",prod:"Ausgestalten",team:"Übertragen",exit:"Weitergeben"};
+    return`<p class="muted small">Jeder Auftrag ist mit deinem Vorhaben gefüllt. Claude recherchiert oder schreibt, du legst das Ergebnis hier ab.</p>`+
+    Object.keys(grp).map(g=>{const l=list.filter(a=>a.out===g);return l.length?`<div class="wirehead"><span class="eyebrow">${grp[g]}</span></div><div class="list">${l.map(a=>{const k=v.results.filter(r=>r.task===a.id).length;return`<button class="li" data-a="auftrag" data-id="${v.id}" data-task="${a.id}"><span class="grow"><span class="t">${esc(a.t)}</span>${k?`<span class="s">${k} Ergebnis${k>1?"se":""} abgelegt</span>`:""}</span><span class="chev"></span></button>`}).join("")}</div>`:""}).join("")+
+    `<div class="wirehead"><span class="eyebrow">Konzept</span></div><div class="field"><label for="v-prod">Produkt- oder Angebotskonzept in deinen Worten</label><textarea id="v-prod" data-bind="v.${v.id}.prod" placeholder="Was genau wird verkauft, von wem hergestellt, zu welchem Preis?">${esc(v.prod||"")}</textarea><span class="hint">Sobald hier etwas steht, gilt das Bauteil „Ausgestaltet“.</span></div>`},
+
+  team(v){const f=tplOf(v).f;
+    return`<p class="muted small">Ein Vorhaben trägt nebenher, wenn jemand anders den Alltag führt. Du steuerst über Absprachen, Handbuch und Abrechnung.</p>
+    <div class="list">${v.team.map(m=>`<div class="li" style="cursor:default"><span class="dot" style="--c:var(--leben)"></span><span class="grow"><span class="t">${esc(m.name)}</span><span class="s">${{kurz:"kurzfristig beschäftigt",mini:"Minijob",frei:"selbstständig"}[m.form]} · ${eur(n0(m.lohn),2)} pro Stunde</span>${m.form==="frei"?`<span class="warn">Scheinselbstständigkeit prüfen</span>`:""}${n0(m.lohn)<RECHT.mindestlohn&&m.form!=="frei"?`<span class="warn">Unter dem Mindestlohn</span>`:""}</span><button class="btn small ghost" data-a="delMember" data-id="${v.id}" data-mid="${m.id}">Entfernen</button></div>`).join("")}</div>
+    <button class="btn wide" data-a="sheet" data-id="member" data-vid="${v.id}">Person hinzufügen</button>
+    <div class="chips"><button class="btn ghost small" data-a="auftrag" data-id="${v.id}" data-task="a_stelle">Anzeige schreiben lassen</button><button class="btn ghost small" data-a="auftrag" data-id="${v.id}" data-task="a_handbuch">Ablauf-Handbuch</button>${f.team?`<button class="btn ghost small" data-a="auftrag" data-id="${v.id}" data-task="a_vertrag">Vertrag entwerfen</button>`:""}</div>
+    <div class="note"><span>${v.solo?"Du hast entschieden, dieses Vorhaben allein zu führen. Das Mobile rechnet dafür etwas mehr Gewicht auf die Vorhaben-Seite.":"Du kannst auch bewusst entscheiden, es allein zu machen. Dann kostet es deine Zeit."}</span><div><button class="linkbtn" data-a="solo" data-id="${v.id}">${v.solo?"Doch nicht allein":"Ich mache es bewusst allein"}</button></div></div>`},
+
+  laeufe(v){const t=tplOf(v), r=calc(v);
+    return`<p class="muted small">Ein Lauf ist ein ${t.lauf}. Nach jedem Lauf trägst du ein, was wirklich war. Zwei gute Läufe mit wenig eigener Zeit ergeben „Trägt sich“.</p>
+    <div class="list">${v.runs.slice().reverse().map(x=>{const g=n0(x.umsatz)-n0(x.kosten);return`<div class="li" style="cursor:default"><span class="grow"><span class="t">${dateDE(x.d)} · Gewinn <span class="num">${eur(g)}</span></span><span class="s">Umsatz ${eur(n0(x.umsatz))} · deine Zeit ${n0(x.meineStd).toLocaleString("de-DE")} Std. · Team ${n0(x.teamStd).toLocaleString("de-DE")} Std.${x.note?" · "+esc(x.note):""}</span></span><button class="btn small ghost" data-a="delRun" data-id="${v.id}" data-rid="${x.id}">Löschen</button></div>`}).join("")||`<p class="muted small" style="padding:12px 0">Noch kein Lauf. Erwartet laut Rechnung: ${eur(r.gewinn)} Gewinn pro ${t.lauf}.</p>`}</div>
+    ${v.exit?"":`<button class="btn wide" data-a="sheet" data-id="run" data-vid="${v.id}">Lauf eintragen</button>`}`},
+
+  uebergabe(v){
+    if(v.exit) return`<div class="note sinn"><strong>${v.exit.art==="einstellen"?"Eingestellt":"Übergeben"} am ${dateDE(v.exit.d)}</strong><span>${v.exit.art==="einstellen"?"Das Vorhaben läuft nicht mehr.":"Für "+eur(n0(v.exit.preis))+(v.exit.an?" an "+esc(v.exit.an):"")+"."}</span></div>${dutiesFor(v).filter(d=>d.w==="exit").map(d=>dutyRow(v,d,false)).join("")}`;
+    const n=stage(v), r=calc(v), pr=preisSpanne(v), art=SH.art||v.exitArt||"komplett";
+    const moods=S.time.filter(x=>x.vid===v.id&&x.mood).slice(-4), mood=moods.length?moods.reduce((s,x)=>s+x.mood,0)/moods.length:null;
+    const last=v.runs[v.runs.length-1];
+    const reasons=[];
+    if(n>=7) reasons.push(["ok","Es trägt sich: zwei Läufe mit Gewinn und wenig eigener Zeit."]);
+    if(v.team.length) reasons.push(["ok","Es gibt jemanden, der den Alltag kennt und es übernehmen könnte."]);
+    if(mood!=null&&mood<2.6) reasons.push(["warn","Die Steuerzeit für dieses Vorhaben tut dir zuletzt nicht gut."]);
+    if(r.wochenStd>n0(S.prof.stunden)*0.6) reasons.push(["warn","Es braucht mehr als die Hälfte deiner Steuerzeit."]);
+    if(last&&n0(last.umsatz)-n0(last.kosten)<=0) reasons.push(["warn","Der letzte Lauf hatte keinen Gewinn."]);
+    const ripe=n>=7||reasons.some(x=>x[0]==="warn");
+    return`<div class="note ${ripe?"sinn":"neben"}"><strong>${n>=7?"Ein guter Moment zum Weitergeben.":ripe?"Weitergeben oder Pause ist eine Überlegung wert.":"Noch zu früh."}</strong><span>${n>=7||ripe?"Ein Vorhaben, das sich trägt, ist für andere am meisten wert. Ein Verkauf gibt dir Geld und Zeit zurück und jemand anderem eine eigene Existenz.":"Weitergeben lohnt sich meist, wenn das Vorhaben zwei Läufe ohne dich getragen hat."}</span></div>
+    ${reasons.length?`<div class="list">${reasons.map(([k,t])=>`<div class="li" style="cursor:default"><span class="pill ${k==="ok"?"ok":"warn"}">${k==="ok"?"spricht dafür":"Achtung"}</span><span class="grow small">${esc(t)}</span></div>`).join("")}</div>`:""}
+    <div class="field"><span class="lab">Wie weitergeben?</span><div class="chips">${[["komplett","Komplett verkaufen"],["anteil","Mit Beteiligung"],["einstellen","Einstellen"]].map(([k,l])=>`<button class="chip" data-a="exitArt" data-id="${k}" data-key="ea${k}" aria-pressed="${art===k}">${l}</button>`).join("")}</div>
+    <span class="hint">${art==="komplett"?"Empfohlen. Ein klarer Schnitt passt zu einer Nebenexistenz mit wenig Verwaltung: Preis gezahlt, Gewerbe abgemeldet, fertig.":art==="anteil"?"Mit Beteiligung bleibst du Mitunternehmer oder stiller Gesellschafter. Das heißt Verträge, Abrechnungen und Steuern auf Dauer. Es widerspricht dem Ziel, wenig Verwaltung zu haben.":"Ohne Verkauf meldest du das Gewerbe ab und verkaufst das Inventar. Auch das ist eine gute Entscheidung, wenn es nicht mehr passt."}</span></div>
+    ${art!=="einstellen"?`<div class="field"><label for="x-inv">Wert des Inventars heute</label><div class="suffix"><input id="x-inv" type="number" inputmode="decimal" data-bind="v.${v.id}.calc.inventar" value="${v.calc.inventar||""}"><span>€</span></div><span class="hint">Stand, Kasse, Vorrat, Werkzeug, zum heutigen Zeitwert.</span></div>
+    <div id="preisOut"><div class="figs"><div class="fig"><span class="k">Preisorientierung</span><span class="v num">${eur(pr[0])} – ${eur(pr[1])}</span><span class="e">Inventar plus ein halber bis ganzer Jahresgewinn</span></div><div class="fig"><span class="k">Jahresgewinn laut Rechnung</span><span class="v num">${eur(r.jahrG)}</span><span class="e">${v.runs.length?v.runs.length+(v.runs.length===1?" Lauf":" Läufe")+" abgerechnet":"noch geschätzt"}</span></div></div></div>
+    <p class="muted small">Eine grobe Faustregel für sehr kleine Betriebe, kein Gutachten. Was jemand zahlt, hängt an Standplatzzusagen, Lieferkontakten und daran, wie sicher die Zahlen sind.</p>
+    <div class="chips"><button class="btn ghost small" data-a="auftrag" data-id="${v.id}" data-task="a_expose">Exposé schreiben lassen</button><button class="btn ghost small" data-a="auftrag" data-id="${v.id}" data-task="a_vertrag2">Vertrag entwerfen</button></div>`:""}
+    <div class="wirehead"><span class="eyebrow">Bei der Übergabe</span></div>${dutiesFor(v).filter(d=>d.w==="exit").map(d=>dutyRow(v,d,false)).join("")}
+    <div class="wirehead"><span class="eyebrow">Abschließen</span></div>
+    ${art!=="einstellen"?`<div class="grid2"><div class="field"><label for="x-preis">Vereinbarter Preis</label><div class="suffix"><input id="x-preis" type="number" inputmode="decimal" value="${pr[0]||""}"><span>€</span></div></div><div class="field"><label for="x-an">An wen</label><input id="x-an" type="text" placeholder="Vorname"></div></div>`:""}
+    <button class="btn wide sinn" data-a="doExit" data-id="${v.id}" data-art="${art}">${art==="einstellen"?"Als eingestellt markieren":"Als übergeben markieren"}</button>`}
+};
+function calcOut(v){const r=calc(v),t=tplOf(v),R=rahmen(),c=v.calc;
+  const w=[];
+  if(n0(c.lohn)>0&&n0(c.lohn)<RECHT.mindestlohn&&(c.form||"kurz")!=="keine") w.push("Der Teamlohn liegt unter dem Mindestlohn von "+fill("{ml}")+" €.");
+  if(R.gesetzt&&r.start>R.deckel) w.push("Die Startkosten liegen über deinem Startgeld-Deckel von "+eur(R.deckel)+". Fang kleiner an oder spar die Differenz vorher an.");
+  if(r.wochenStd>n0(S.prof.stunden)) w.push("Allein dieses Vorhaben braucht im Schnitt "+r.wochenStd.toLocaleString("de-DE",{maximumFractionDigits:1})+" Stunden pro Woche. Das ist mehr als dein ganzer Rahmen.");
+  if(jahresUmsatzAlle()>RECHT.kuVorjahr) w.push("Alle Vorhaben zusammen liegen über 25.000 € Umsatz. Die Kleinunternehmerregelung entfällt dann im Folgejahr.");
+  return`<div class="figs">
+    <div class="fig"><span class="k">Gewinn pro ${esc(t.lauf)}</span><span class="v num ${r.gewinn<0?"neg":""}">${eur(r.gewinn)}</span><span class="e">Umsatz ${eur(r.umsatz)} minus Kosten ${eur(r.kosten)}</span></div>
+    <div class="fig"><span class="k">Gewinn im Jahr</span><span class="v num ${r.jahrG<0?"neg":""}">${eur(r.jahrG)}</span><span class="e">bei ${r.laeufe} Läufen</span></div>
+    <div class="fig"><span class="k">Pro eigener Stunde</span><span class="v num">${r.proStd==null?"–":eur(r.proStd)}</span><span class="e">${r.wochenStd.toLocaleString("de-DE",{maximumFractionDigits:1})} Std. pro Woche im Schnitt</span></div>
+    <div class="fig"><span class="k">Startgeld zurück</span><span class="v num">${r.amort==null?"nie":"nach "+r.amort}</span><span class="e">${r.amort==null?"solange der Gewinn nicht positiv ist":"Läufen"}</span></div></div>
+    ${r.personal>0?`<p class="muted small">Team pro ${esc(t.lauf)}: ${eur(r.personal)}${r.abg?" inklusive rund "+RECHT.minijobAbgabe+" % Pauschalabgaben":" ohne Sozialabgaben (kurzfristig)"}.</p>`:""}
+    ${w.map(x=>`<p class="warn">${esc(x)}</p>`).join("")}`;
+}
+function werteBlock(v){
+  if(!S.werte.length) return`<p class="muted small">Noch keine Werte eingetragen. Mit Werten prüfst du hier, ob das Vorhaben zu dir passt.</p><div><button class="btn small ghost" data-a="sheet" data-id="werte">Werte eintragen</button></div>`;
+  return`<div class="stack">${S.werte.map(w=>`<div><p class="small" style="margin-bottom:6px">${esc(w)}</p><div class="chips">${[["passt","passt"],["teils","teils"],["reibt","reibt sich"]].map(([k,l])=>`<button class="chip" data-a="wert" data-id="${v.id}" data-w="${esc(w)}" data-val="${k}" data-key="wv${esc(w)}${k}" aria-pressed="${v.werte[w]===k}" style="--c:${k==="reibt"?"var(--leben)":"var(--sinn)"}">${l}</button>`).join("")}</div></div>`).join("")}</div>
+  ${Object.values(v.werte).includes("reibt")?`<div class="note leben"><span>Mindestens ein Wert reibt sich. Überleg, was du ändern müsstest, damit es passt, oder ob es das richtige Vorhaben ist.</span></div>`:""}`;
+}
+function bioBlock(v){
+  const yes=BIO_FRAGEN.filter(q=>v.bio[q.id]==="ja").length;
+  return`<div class="stack">${BIO_FRAGEN.map(q=>`<div><p class="small" style="margin-bottom:6px"><strong>${q.t}.</strong> ${esc(q.q)}</p><div class="chips">${[["ja","ja"],["teils","teils"],["nein","nein"]].map(([k,l])=>`<button class="chip" data-a="bio" data-id="${v.id}" data-q="${q.id}" data-val="${k}" data-key="bi${q.id}${k}" aria-pressed="${v.bio[q.id]===k}" style="--c:var(--sinn)">${l}</button>`).join("")}</div></div>`).join("")}</div>
+  <p class="muted small">${yes} von 5 Punkten erfüllt.</p><div class="chips"><button class="btn small ghost" data-a="auftrag" data-id="${v.id}" data-task="a_nachhaltig">Nachhaltiger machen lassen</button><a class="linkbtn" href="${esc(S.settings.apps.bt)}" target="_blank" rel="noopener">Im Biotop weiterdenken</a></div>`;
+}
+
+/* ---------- Hauptansicht ---------- */
+const TABS=[["home","Mobile"],["vorhaben","Vorhaben"],["amt","Ämter"],["leben","Leben"]];
+function render(){
+  const main=$("#main");
+  const v={home:viewHome,vorhaben:viewVorhaben,amt:viewAmt,leben:viewLeben}[S.tab]||viewHome;
+  main.innerHTML=v();
+  document.querySelectorAll("nav.tabs button").forEach((b,i)=>{const on=TABS[i][0]===S.tab;b.setAttribute("aria-current",on?"page":"false")});
+  moveDot();
+  afterRender();
+  if(S.tab==="home"&&S.fresh.length){setTimeout(()=>{S.fresh=[];persist()},1500)}
+}
+function moveDot(){const i=TABS.findIndex(t=>t[0]===S.tab),nav=$("nav.tabs .in"),d=$(".tabdot");if(!nav||!d)return;const w=nav.clientWidth/4;d.style.left=(w*i+w/2-2.5)+"px"}
+function afterRender(){
+  if(lastSel&&performance.now()-lastSel.t<800){const el=document.querySelector(`[data-key="${CSS.escape(lastSel.key)}"]`);
+    if(el&&el.getAttribute("aria-pressed")==="true"){const b=el.getBoundingClientRect();el.style.setProperty("--fx",(lastSel.x-b.left)+"px");el.style.setProperty("--fy",(lastSel.y-b.top)+"px");el.classList.add("fill-in")}}
+  lastSel=null;
+  if(IOS) armHaptics();
+}
+function setTab(t){S.tab=t;persist();render();window.scrollTo(0,0);try{const m=$("#main h2,#main h1");if(m){m.setAttribute("tabindex","-1");m.focus({preventScroll:true})}}catch(e){}}
+
+/* ---------- Momente ---------- */
+function showMoment(){
+  if(SH||S.tab!=="home"||!S.mq.length) return;
+  const [mid,...more]=S.mq; S.mq=[]; persist();
+  openSheet("moment",{mid,more});
+}
+
+/* ---------- Toast mit Rückgängig ---------- */
+let toastT=null, undoSnap=null;
+function toast(msg,undo,ok){
+  const t=$("#toast"); undoSnap=undo||null;
+  t.innerHTML=`${ok?`<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`:""}<span>${esc(msg)}</span>${undo?`<button data-a="undo">Rückgängig</button>`:""}`;
+  t.classList.toggle("up",!!SH); t.hidden=false; requestAnimationFrame(()=>t.classList.add("on"));
+  clearTimeout(toastT); toastT=setTimeout(()=>{t.classList.remove("on");setTimeout(()=>{t.hidden=true},250);undoSnap=null},undo?5200:2400);
+  live(msg);
+}
+function live(m){const l=$("#live");l.textContent="";setTimeout(()=>{l.textContent=m},50)}
+
+/* ---------- Haptik und Klickfamilien ---------- */
+const IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
+const HAPSEL=".btn,.chip,.check,.person,.card,.logo,.closebtn,.iconbtn,.fig";
+const PAT={sel:10,act:12,ok:[10,60,14],err:[24,60,24]};
+const vibOn=()=>S.settings.vib!==false;
+function buzz(k){ if(!vibOn()||IOS) return; try{navigator.vibrate&&navigator.vibrate(PAT[k])}catch(e){} }
+function armHaptics(){ if(!vibOn()) return;
+  document.querySelectorAll(HAPSEL).forEach(el=>{
+    if(el.tagName==="A"||el.querySelector(":scope>label.hap")) return;
+    const l=document.createElement("label"); l.className="hap"; l.setAttribute("aria-hidden","true");
+    l.addEventListener("click",e=>{if(e.target===l) e.stopPropagation()});
+    const i=document.createElement("input"); i.type="checkbox"; i.setAttribute("switch",""); i.tabIndex=-1;
+    l.appendChild(i); el.appendChild(l);
+  });
+}
+let lastSel=null, tg=null, cancelUntil=0;
+const TAPSEL=".btn,.chip,.check,.person,.card,.li,.fig,.mob-hit";
+addEventListener("touchstart",e=>{cancelUntil=0;const t=e.touches[0],el=e.target.closest&&e.target.closest(TAPSEL);tg=el?{el,x:t.clientX,y:t.clientY,moved:false}:null},{passive:true,capture:true});
+addEventListener("touchmove",e=>{if(!tg||tg.moved)return;const t=e.touches[0];if(Math.hypot(t.clientX-tg.x,t.clientY-tg.y)>10){tg.moved=true;tg.el.classList.add("nopress")}},{passive:true,capture:true});
+addEventListener("touchend",e=>{if(!tg)return;if(tg.moved)cancelUntil=performance.now()+600;tg.el.classList.remove("nopress");tg=null},{passive:true,capture:true});
+document.addEventListener("click",e=>{if(performance.now()<cancelUntil){cancelUntil=0;e.preventDefault();e.stopImmediatePropagation()}},true);
+document.addEventListener("pointerup",e=>{
+  const el=e.target.closest&&e.target.closest(".btn,.card,.fig,.closebtn"); if(!el||el.disabled||matchMedia("(prefers-reduced-motion:reduce)").matches) return;
+  const b=el.getBoundingClientRect(), d=Math.max(b.width,b.height)*2.2, r=document.createElement("span");
+  r.className="ripple"; r.style.cssText=`width:${d}px;height:${d}px;left:${e.clientX-b.left-d/2}px;top:${e.clientY-b.top-d/2}px`;
+  el.appendChild(r); setTimeout(()=>r.remove(),650);
+});
+
+/* ---------- Zentraler Klick-Handler ---------- */
+document.addEventListener("click",e=>{
+  const hap=e.target.classList&&e.target.closest&&e.target.closest("label.hap"); if(hap&&e.target.tagName==="INPUT") e.target.blur();
+  const el=e.target.closest&&e.target.closest("[data-a]"); if(!el||el.disabled) return;
+  const a=el.dataset.a, d=el.dataset;
+  if(el.classList.contains("chip")||el.classList.contains("check")||el.classList.contains("person")){lastSel={key:d.key||"",x:e.clientX,y:e.clientY,t:performance.now()};buzz("sel")} else buzz("act");
+  const H=ACT[a]; if(H){ if(el.tagName==="A"&&a!=="claudeGo") e.preventDefault(); H(d,el,e) }
+});
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"&&SH) closeSheet();
+  if((e.key==="Enter"||e.key===" ")&&e.target.classList&&e.target.classList.contains("mob-hit")){e.preventDefault();e.target.dispatchEvent(new MouseEvent("click",{bubbles:true}))}
+  if(e.key==="Tab"&&SH){const f=[...$("#sheet").querySelectorAll("button,a,input,select,textarea,[tabindex]")].filter(x=>!x.disabled&&x.offsetParent!==null&&x.tabIndex>=0);if(!f.length)return;
+    if(e.shiftKey&&document.activeElement===f[0]){e.preventDefault();f[f.length-1].focus()}else if(!e.shiftKey&&document.activeElement===f[f.length-1]){e.preventDefault();f[0].focus()}}
+});
+document.addEventListener("toggle",e=>{const k=e.target.dataset&&e.target.dataset.key;if(!k)return;e.target.open?OPEN.add(k):OPEN.delete(k)},true);
+
+/* Eingaben: data-bind="prof.netto" oder "v.<id>.calc.preis" */
+document.addEventListener("input",e=>{
+  const b=e.target.dataset&&e.target.dataset.bind; if(!b) return;
+  const parts=b.split("."); let obj=S, i=0;
+  if(parts[0]==="v"){obj=vById(parts[1]);i=2;if(!obj)return}
+  for(;i<parts.length-1;i++){obj=obj[parts[i]]=obj[parts[i]]||{}}
+  const k=parts[parts.length-1], val=e.target.type==="number"?(e.target.value===""?"":n0(e.target.value)):e.target.value;
+  obj[k]=val; save();
+  if(parts[0]==="v"&&parts[2]==="calc"){const v=vById(parts[1]);const o=$("#calcOut");if(o)o.innerHTML=calcOut(v);const po=$("#preisOut");if(po&&SH)renderSheetPart(v)}
+  if(parts[0]==="prof"){const o=$("#rahmenOut");if(o)o.innerHTML=rahmenOut()}
+});
+document.addEventListener("change",e=>{if(e.target.tagName==="SELECT"&&e.target.dataset.bind){e.target.dispatchEvent(new Event("input",{bubbles:true}))}});
+function renderSheetPart(v){const pr=preisSpanne(v),r=calc(v),po=$("#preisOut");if(!po)return;const vs=po.querySelectorAll(".v");if(vs[0])vs[0].textContent=eur(pr[0])+" – "+eur(pr[1]);if(vs[1])vs[1].textContent=eur(r.jahrG)}
+
+const ACT={
+  tab:d=>{if(SH)closeSheet();setTab(d.id)},
+  sheet:d=>{const o={};if(d.vid)o.vid=d.vid;if(d.wid)o.wid=d.wid;if(d.form)o.form=d.form;openSheet(d.id,o)},
+  close:()=>closeSheet(),
+  venture:d=>openSheet("venture",{vid:d.id,sub:d.sub||"bauteile"}),
+  sub:d=>{SH.sub=d.id;SH.art=null;renderSheet()},
+  auftrag:d=>openSheet("auftrag",{vid:d.id,task:d.task}),
+  explain:d=>openSheet("explain",{eid:d.id}),
+  later:()=>{S.override="";toast("Gut. Der Schritt wartet.");},
+  override:()=>{S.override=today();save();render();toast("Heute darfst du kurz steuern. Morgen gilt wieder dein Rahmen.")},
+  seen:d=>{const p=S.people.find(x=>x.id===d.id);if(!p)return;const sn=snapshot();p.last=today();save();render();if(SH)renderSheet();buzz("ok");toast(p.name+" eingetragen.",sn,true)},
+  hintOff:d=>{S.hintsOff[d.id]=1;S.hint={d:today(),id:""};save();render()},
+  welcomeGo:()=>{S.onb=true;save();openSheet("profil")},
+  demoOn:()=>{loadDemo();S.onb=true;save();if(SH)closeSheet();render();toast("Beispiel geladen.")},
+  demoOff:()=>{const keep=S.settings;S=fresh();S.settings=keep;S.onb=true;save();if(SH)closeSheet();render();toast("Beispiel gelöscht.")},
+  beruf:d=>{S.prof.beruf=d.id;save();renderSheet()},
+  profilSave:()=>{if(!S.prof.land||!S.prof.beruf){const b=$("[data-a=profilSave]");b.classList.add("shake");setTimeout(()=>b.classList.remove("shake"),350);buzz("err");toast("Bitte Bundesland und Hauptberuf wählen.");return}save();closeSheet();buzz("ok");toast("Rahmen gespeichert.",null,true)},
+  pickTpl:d=>openSheet("name",{tpl:d.id}),
+  createV:d=>{const t=VORLAGEN.find(x=>x.id===d.id), nm=($("#f-vname").value||"").trim()||t.n, ds=($("#f-vdesc").value||"").trim();
+    if(aktive().length>=MAX_AKTIV) return;
+    const v={id:uid(),tpl:t.id,name:nm,desc:ds,created:today(),calc:Object.assign({form:t.f.team?"kurz":"keine",laeufe:t.laeufe,start:Math.round((t.start[0]+t.start[1])/2/100)*100,inventar:0},t.calc),duties:{},team:[],runs:[],results:[],werte:{},bio:{},prod:""};
+    S.ventures.push(v);save();closeSheet();setTab("home");buzz("ok");toast("„"+nm+"“ hängt am Mobile.",null,true)},
+  delV:d=>{const sn=snapshot();S.ventures=S.ventures.filter(v=>v.id!==d.id);delete S.lv[d.id];save();closeSheet();toast("Vorhaben gelöscht.",sn)},
+  duty:d=>{const v=vById(d.id), du=PFLICHTEN.find(x=>x.id===d.duty), sn=snapshot();
+    if(PERSON.has(du.id)){S.pduties[du.id]?delete S.pduties[du.id]:S.pduties[du.id]=today()} else {v.duties[du.id]?delete v.duties[du.id]:v.duties[du.id]=today()}
+    save(); if(SH)renderSheet(); render(); const on=dutyDone(v,du); if(on){buzz("ok");toast("Erledigt: "+du.t,sn,true)} },
+  passOk:d=>{const v=vById(d.id);if(!(n0(v.calc.preis)>0&&n0(v.calc.stueck)>0)){buzz("err");toast("Trag zuerst Preis und Stückzahl ein.");return}v.passOk=today();save();renderSheet();render();buzz("ok");toast("Passung bestätigt.",null,true)},
+  cform:d=>{const v=vById(d.vid);v.calc.form=d.id;save();renderSheet()},
+  wert:d=>{const v=vById(d.id);v.werte[d.w]=v.werte[d.w]===d.val?undefined:d.val;if(!v.werte[d.w])delete v.werte[d.w];save();renderSheet()},
+  bio:d=>{const v=vById(d.id);v.bio[d.q]=v.bio[d.q]===d.val?undefined:d.val;if(!v.bio[d.q])delete v.bio[d.q];save();renderSheet()},
+  claudeGo:(d,el)=>{const t=$("#f-prompt");if(t){el.href="https://claude.ai/new?q="+encodeURIComponent(t.value);copyText(t.value)}},
+  copy:d=>{const src=document.getElementById(d.src);if(!src)return;copyText(src.value!=null&&src.tagName!=="P"?src.value:src.textContent,src)},
+  saveResult:d=>{const v=vById(d.id), tx=($("#f-result").value||"").trim();if(!tx){buzz("err");toast("Füge zuerst eine Antwort ein.");return}
+    v.results.push({id:uid(),task:d.task,text:tx,d:today()});const a=AUFTRAEGE.find(x=>x.id===d.task);if(a.out==="prod"&&!(v.prod||"").trim())v.prod=tx.slice(0,1200);save();renderSheet();render();buzz("ok");toast("Ergebnis abgelegt.",null,true)},
+  tvid:d=>{SH.vid=d.id;renderSheet()},
+  tmin:d=>{SH.min=SH.min==d.id?0:+d.id;renderSheet()},
+  tmood:d=>{SH.mood=SH.mood==d.id?0:+d.id;renderSheet()},
+  saveTime:d=>{S.time.push({id:uid(),d:today(),vid:d.vid||"",min:SH.min,mood:SH.mood||null});S.time=S.time.slice(-400);save();closeSheet();buzz("ok");
+    const b=balance();toast(b.state==="zieht"?"Eingetragen. Für diese Woche ist dein Rahmen erreicht.":"Eingetragen.",null,true)},
+  saveRun:d=>{const v=vById(d.id);v.runs.push({id:uid(),d:$("#r-d").value||today(),umsatz:n0($("#r-u").value),kosten:n0($("#r-k").value),meineStd:n0($("#r-m").value),teamStd:n0($("#r-t").value),note:$("#r-n").value.trim()});save();openSheet("venture",{vid:v.id,sub:"laeufe"});buzz("ok");toast("Lauf abgerechnet.",null,true)},
+  delRun:d=>{const v=vById(d.id),sn=snapshot();v.runs=v.runs.filter(r=>r.id!==d.rid);save();renderSheet();render();toast("Lauf gelöscht.",sn)},
+  mform:d=>{SH.form=d.id;const keep={n:$("#m-n").value,l:$("#m-l").value};renderSheet();$("#m-n").value=keep.n;$("#m-l").value=keep.l},
+  saveMember:d=>{const v=vById(d.id),nm=$("#m-n").value.trim();if(!nm){buzz("err");toast("Gib einen Namen oder eine Rolle ein.");return}
+    v.team.push({id:uid(),name:nm,form:SH.form||"kurz",lohn:n0($("#m-l").value)});if(v.solo)v.solo=false;save();openSheet("venture",{vid:v.id,sub:"team"});buzz("ok");toast(nm+" führt jetzt mit.",null,true)},
+  delMember:d=>{const v=vById(d.id),sn=snapshot();v.team=v.team.filter(m=>m.id!==d.mid);save();renderSheet();render();toast("Entfernt.",sn)},
+  solo:d=>{const v=vById(d.id);v.solo=!v.solo;save();renderSheet();render()},
+  exitArt:d=>{SH.art=d.id;const v=vById(SH.vid);v.exitArt=d.id;save();renderSheet()},
+  doExit:d=>{const v=vById(d.id),sn=snapshot(),pi=$("#x-preis"),an=$("#x-an");v.exit={d:today(),art:d.art,preis:pi?n0(pi.value):0,an:an?an.value.trim():""};save();closeSheet();setTab("home");buzz("ok");toast("„"+v.name+"“ ist weitergegeben.",sn,true)},
+  addPerson:()=>{const i=$("#p-n"),nm=(i.value||"").trim();if(!nm)return;S.people.push({id:uid(),name:nm,last:""});save();renderSheet();render();setTimeout(()=>{const x=$("#p-n");if(x)x.focus()},30)},
+  delPerson:d=>{const sn=snapshot();S.people=S.people.filter(p=>p.id!==d.id);save();renderSheet();render();toast("Entfernt.",sn)},
+  addWert:()=>{const i=$("#w-n"),w=(i.value||"").trim();if(!w||S.werte.includes(w))return;S.werte.push(w);save();renderSheet();render()},
+  delWert:d=>{const sn=snapshot();S.werte.splice(+d.id,1);save();renderSheet();render();toast("Entfernt.",sn)},
+  tag:d=>{const x=+d.id,t=S.prof.tage;S.prof.tage=t.includes(x)?t.filter(y=>y!==x):[...t,x];save();render()},
+  std:d=>{S.prof.stunden=+d.id;save();render()},
+  wmit:d=>{const w=SH.w;w.mit=w.mit.includes(d.id)?w.mit.filter(x=>x!==d.id):[...w.mit,d.id];w.weg=$("#w-weg").value;renderSheet()},
+  wkraft:d=>{SH.w.kraft=d.id;SH.w.weg=$("#w-weg").value;renderSheet()},
+  saveWeek:()=>{const w=SH.w;w.weg=$("#w-weg").value.trim();w.mit.forEach(id=>{const p=S.people.find(x=>x.id===id);if(p&&(!p.last||p.last<today()))p.last=today()});S.weeks.push({d:today(),kraft:w.kraft,weg:w.weg,mit:w.mit});save();closeSheet();buzz("ok");
+    toast(w.kraft==="nahm"?"Notiert. Vielleicht ist ein Vorhaben reif zum Weitergeben.":"Wochenblick gespeichert.",null,true)},
+  theme:d=>{S.settings.theme=d.id;applyTheme();save();renderSheet()},
+  vib:()=>{S.settings.vib=!S.settings.vib;save();renderSheet()},
+  export:()=>openSheet("exportv"),
+  exportFile:()=>{try{const b=new Blob([JSON.stringify(S,null,1)],{type:"application/json"}),a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="nebenexistenz-"+today()+".json";document.body.appendChild(a);a.click();a.remove()}catch(e){toast("Das ging nicht. Nutze „Sicherung kopieren“.")}},
+  doImport:async()=>{let tx=($("#f-imp").value||"").trim();const f=$("#f-impfile").files[0];if(!tx&&f)tx=await f.text();
+    try{const o=JSON.parse(tx);if(!o||typeof o!=="object"||!("prof" in o))throw 0;const sn=snapshot();S=deepMerge(fresh(),o);migrate();save();closeSheet();applyTheme();render();buzz("ok");toast("Sicherung geladen.",sn,true)}catch(e){buzz("err");toast("Das ist keine gültige Sicherung.")}},
+  reset1:()=>{SH.reset=true;renderSheet()},
+  reset2:()=>{S=fresh();persist();closeSheet();applyTheme();render();openSheet("welcome")},
+  undo:()=>{if(!undoSnap)return;S=undoSnap;undoSnap=null;persist();$("#toast").classList.remove("on");if(SH)renderSheet();render()},
+  logo:(d,el)=>{el.classList.add("spin");setTimeout(()=>el.classList.remove("spin"),520);if(SH)closeSheet();setTab("home")}
+};
+function copyText(tx,src){
+  const done=()=>{buzz("ok");toast("Kopiert.",null,true)};
+  try{navigator.clipboard.writeText(tx).then(done,()=>fallback())}catch(e){fallback()}
+  function fallback(){try{const r=document.createRange();if(src&&src.select){src.select()}else if(src){r.selectNodeContents(src);const s=getSelection();s.removeAllRanges();s.addRange(r)}document.execCommand&&document.execCommand("copy");toast("Markiert. Jetzt kopieren.")}catch(e){}}
+}
+
+/* ---------- Beispiel ---------- */
+function loadDemo(){
+  const keep=S.settings; S=fresh(); S.settings=keep; S.demo=true; S.onb=true;
+  const d=k=>{const x=new Date();x.setDate(x.getDate()-k);return x.toISOString().slice(0,10)};
+  S.prof={land:"SN",ort:"Leipzig",beruf:"ang",netto:2900,fix:1700,ruecklage:14000,stunden:4,tage:[2,6]};
+  S.pduties={ag:d(40),fse:d(30),ku:d(30),kasse:d(28),bg:d(30)};
+  S.werte=["Gerechtigkeit","Nachhaltigkeit","Freiheit"];
+  S.people=[{id:"p1",name:"Mia",last:d(2)},{id:"p2",name:"Jonas",last:d(5)},{id:"p3",name:"Mama",last:d(19)},{id:"p4",name:"Ali",last:d(9)}];
+  const t=VORLAGEN[0];
+  S.ventures=[{id:"v1",tpl:"markt",name:"Wachs & Docht",desc:"Bienenwachstücher und Kerzen auf zwei Leipziger Weihnachtsmärkten",created:d(60),passOk:d(50),
+    calc:Object.assign({},t.calc,{form:"kurz",laeufe:24,start:1400,inventar:900}),
+    duties:{gew:d(35),haft:d(33),platz:d(45),gpsr:d(20),lucid:d(25)},prod:"Bienenwachstücher in drei Größen und Rapskerzen, gefertigt von einer Werkstatt für Menschen mit Behinderung in Leipzig-Grünau.",
+    team:[{id:"m1",name:"Standleitung Jana",form:"kurz",lohn:16}],runs:[{id:"r1",d:d(3),umsatz:640,kosten:390,meineStd:1.5,teamStd:9,note:"Regen am Nachmittag"}],
+    results:[],werte:{Gerechtigkeit:"passt",Nachhaltigkeit:"passt",Freiheit:"teils"},bio:{mat:"ja",weg:"ja",pack:"teils",halt:"ja",rest:"teils"}},
+   {id:"v2",tpl:"verleih",name:"Lastenrad Ost",desc:"Ein Lastenrad und ein Anhänger zum Leihen im Leipziger Osten",created:d(12),
+    calc:Object.assign({},VORLAGEN[2].calc,{form:"kurz",laeufe:12,start:2600,inventar:0}),duties:{},prod:"",team:[],runs:[],results:[],werte:{},bio:{}}];
+  S.time=[{id:"t1",d:d(1),vid:"v1",min:45,mood:4},{id:"t2",d:d(4),vid:"v2",min:60,mood:3}];
+  S.weeks=[{d:d(1),kraft:"gab",weg:"Abends keine Mails",mit:["p1","p2"]}];
+  S.seen={first:1,amt:1,lauf:1}; S.lv={v1:6,v2:1}; S.fresh=[]; S.mq=[];
+}
+
+/* ---------- Theme, Aktualisierung, Start ---------- */
+function applyTheme(){const t=S.settings.theme;if(t==="auto")document.documentElement.removeAttribute("data-theme");else document.documentElement.setAttribute("data-theme",t)}
+function busy(){const a=document.activeElement;return !!SH||(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName))}
+function checkUpdate(){
+  if(!/github\.io$/.test(location.hostname)) return;
+  fetch(location.pathname,{cache:"reload"}).then(r=>r.text()).then(t=>{const m=t.match(/const BUILD="([^"]+)"/);if(!m||m[1]===BUILD)return;
+    const go=()=>{if(busy()){setTimeout(go,4000);return}location.reload()};go()}).catch(()=>{});
+}
+function countOpen(){const t=today();if(S.opens.d===t)S.opens.n++;else S.opens={d:t,n:1};persist()}
+addEventListener("popstate",()=>{if(SH)closeSheet(true)});
+addEventListener("resize",moveDot);
+document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"){countOpen();checkUpdate();if(!SH)render()}});
+
+/* Herunterziehen am Griff schließt den Bogen */
+(function(){let y0=null,dy=0;const g=()=>$("#sheet .grip");
+  document.addEventListener("pointerdown",e=>{if(e.target.closest(".grip")){y0=e.clientY;dy=0;$("#sheet").style.transition="none"}});
+  document.addEventListener("pointermove",e=>{if(y0==null)return;dy=Math.max(0,e.clientY-y0);$("#sheet").style.transform=`translateY(${dy}px)`});
+  document.addEventListener("pointerup",()=>{if(y0==null)return;const s=$("#sheet");s.style.transition="";s.style.transform="";y0=null;if(dy>90)closeSheet()});
+})();
+
+function boot(){
+  load(); applyTheme(); countOpen();
+  if(!S.prof.tage) S.prof.tage=[2,6];
+  const h=(location.hash||"").slice(1); if(TABS.some(t=>t[0]===h)) S.tab=h;
+  render();
+  if(!S.onb) openSheet("welcome"); else setTimeout(showMoment,900);
+  setTimeout(checkUpdate,1500);
+  if("serviceWorker" in navigator&&location.protocol==="https:"&&!IN_FRAME&&/github\.io$/.test(location.hostname)){navigator.serviceWorker.register("sw.js").catch(()=>{})}
+}
+boot();

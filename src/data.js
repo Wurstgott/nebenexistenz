@@ -1,0 +1,324 @@
+/* ===== Nebenexistenz · Inhalte als Daten =====
+   Regel: ids ändern sich nie, neue Einträge hinten anhängen.
+   Rechtsstand: Oktober 2026. Jede Zahl steht in RECHT und hat eine Quelle. */
+
+const RECHT = {
+  stand: "Oktober 2026",
+  mindestlohn: 13.90,          // seit 1.1.2026, 2027: 14,60 € (MiLoG, Mindestlohnanpassungsverordnung)
+  minijob: 603,                // €/Monat seit 1.1.2026 (Minijob-Zentrale, DRV)
+  minijobAbgabe: 31,           // % Pauschalabgaben gewerblicher Minijob, gerundet (Minijob-Zentrale)
+  kurzTage: 70,                // kurzfristige Beschäftigung: 3 Monate oder 70 Arbeitstage im Kalenderjahr
+  kuVorjahr: 25000,            // § 19 UStG, netto, seit 2025
+  kuLaufend: 100000,           // § 19 UStG, harte Grenze im laufenden Jahr
+  gewStFrei: 24500,            // § 11 GewStG, Freibetrag Gewerbeertrag für Einzelunternehmen
+  haerte: 410,                 // § 46 EStG, Nebeneinkünfte bis 410 € ohne Erklärungspflicht für Arbeitnehmer
+  ihkFrei: 5200,               // § 3 IHKG, Beitragsfreiheit bis 5.200 € Gewerbeertrag (natürliche Personen ohne HR-Eintrag)
+  fsEFrist: "innerhalb eines Monats nach Beginn" // § 138 AO
+};
+
+/* Bundesländer: landesspezifische Feiertage (wichtig für Markt- und Steuertage)
+   und Hinweise, welche Regeln Ländersache sind. */
+const LAENDER = [
+  {id:"BW",n:"Baden-Württemberg",ft:["Heilige Drei Könige (6.1.)","Fronleichnam","Allerheiligen (1.11.)"]},
+  {id:"BY",n:"Bayern",ft:["Heilige Drei Könige (6.1.)","Fronleichnam","Mariä Himmelfahrt (15.8., in überwiegend katholischen Gemeinden)","Augsburger Friedensfest (8.8., nur Augsburg)","Allerheiligen (1.11.)"]},
+  {id:"BE",n:"Berlin",ft:["Internationaler Frauentag (8.3.)"]},
+  {id:"BB",n:"Brandenburg",ft:["Ostersonntag","Pfingstsonntag","Reformationstag (31.10.)"]},
+  {id:"HB",n:"Bremen",ft:["Reformationstag (31.10.)"]},
+  {id:"HH",n:"Hamburg",ft:["Reformationstag (31.10.)"]},
+  {id:"HE",n:"Hessen",ft:["Fronleichnam"]},
+  {id:"MV",n:"Mecklenburg-Vorpommern",ft:["Internationaler Frauentag (8.3.)","Reformationstag (31.10.)"]},
+  {id:"NI",n:"Niedersachsen",ft:["Reformationstag (31.10.)"]},
+  {id:"NW",n:"Nordrhein-Westfalen",ft:["Fronleichnam","Allerheiligen (1.11.)"]},
+  {id:"RP",n:"Rheinland-Pfalz",ft:["Fronleichnam","Allerheiligen (1.11.)"]},
+  {id:"SL",n:"Saarland",ft:["Fronleichnam","Mariä Himmelfahrt (15.8.)","Allerheiligen (1.11.)"]},
+  {id:"SN",n:"Sachsen",ft:["Fronleichnam (einzelne Gemeinden)","Reformationstag (31.10.)","Buß- und Bettag (Mittwoch vor dem 23.11.)"]},
+  {id:"ST",n:"Sachsen-Anhalt",ft:["Heilige Drei Könige (6.1.)","Reformationstag (31.10.)"]},
+  {id:"SH",n:"Schleswig-Holstein",ft:["Reformationstag (31.10.)"]},
+  {id:"TH",n:"Thüringen",ft:["Fronleichnam (einzelne Gemeinden)","Weltkindertag (20.9.)","Reformationstag (31.10.)"]}
+];
+
+/* Hauptberuf: bestimmt, was vor dem Start mit dem Hauptberuf zu klären ist */
+const BERUFE = [
+  {id:"ang",n:"Angestellt"},
+  {id:"beamt",n:"Verbeamtet"},
+  {id:"stud",n:"Im Studium"},
+  {id:"selbst",n:"Schon selbstständig"},
+  {id:"ohne",n:"Anderes"}
+];
+
+/* Vorlagen für Vorhaben.
+   f = Merkmale, die Pflichtschritte auslösen. form = Gestalt im Mobile.
+   calc = Startwerte der Rechnung pro "Lauf" (Markttag, Monat, Saison). */
+const VORLAGEN = [
+  {id:"markt",n:"Saisonstand auf Märkten",form:"kreis",
+   kurz:"Ein Stand auf Weihnachts-, Wochen- oder Themenmärkten, betrieben von einer Standleitung.",
+   bsp:"Zum Beispiel Bienenwachstücher und Kerzen auf zwei Weihnachtsmärkten.",
+   lauf:"Markttag", laeufe:24, start:[600,2500],
+   f:{markt:1,team:1,ort:1},
+   calc:{preis:14,kosten:5,stueck:45,stand:60,lohn:15,teamStd:9,meineStd:0.5,fix:0},
+   taetig:"Einzelhandel mit selbst entworfenen Waren auf Märkten"},
+  {id:"online",n:"Eigenes Produkt im Versand",form:"dreieck",
+   kurz:"Ein kleines Produkt, das du entwirfst, andere herstellen und das per Post zu den Leuten kommt.",
+   bsp:"Zum Beispiel Notizbücher aus Recyclingpapier, gefertigt von einer Buchbinderei.",
+   lauf:"Monat", laeufe:12, start:[400,2000],
+   f:{versand:1,produkt:1},
+   calc:{preis:19,kosten:7,stueck:30,stand:25,lohn:0,teamStd:0,meineStd:3,fix:15},
+   taetig:"Onlinehandel mit eigenen Produkten"},
+  {id:"verleih",n:"Verleih",form:"blatt",
+   kurz:"Dinge, die viele selten brauchen, werden verliehen statt gekauft.",
+   bsp:"Zum Beispiel ein Lastenrad und ein Partyzelt für die Nachbarschaft.",
+   lauf:"Monat", laeufe:12, start:[800,4000],
+   f:{verleih:1,ort:1},
+   calc:{preis:25,kosten:4,stueck:10,stand:0,lohn:15,teamStd:3,meineStd:1,fix:20},
+   taetig:"Vermietung von beweglichen Gegenständen"},
+  {id:"kiste",n:"Regionale Kiste oder Regal",form:"quadrat",
+   kurz:"Ein Regal oder eine Abo-Kiste mit Erzeugnissen aus der Region, betreut von jemandem vor Ort.",
+   bsp:"Zum Beispiel ein Honig- und Apfelsaft-Regal im Hofladen eines Bekannten.",
+   lauf:"Monat", laeufe:12, start:[300,1500],
+   f:{lebensmittel:1,team:1,ort:1},
+   calc:{preis:8,kosten:5,stueck:80,stand:30,lohn:15,teamStd:6,meineStd:1,fix:0},
+   taetig:"Einzelhandel mit verpackten Lebensmitteln"},
+  {id:"kurs",n:"Kurse und Workshops",form:"halbmond",
+   kurz:"Andere geben Kurse zu einem Thema, das du aufsetzt. Du organisierst Raum, Material und Anmeldung.",
+   bsp:"Zum Beispiel Reparatur-Workshops für Fahrräder, geleitet von einer Mechanikerin.",
+   lauf:"Termin", laeufe:10, start:[200,1200],
+   f:{kurs:1,team:1,ort:1},
+   calc:{preis:35,kosten:6,stueck:8,stand:40,lohn:20,teamStd:4,meineStd:1,fix:0},
+   taetig:"Organisation und Durchführung von Kursen"},
+  {id:"dienst",n:"Kleine Dienstleistung mit Team",form:"raute",
+   kurz:"Eine Dienstleistung, die du einrichtest und die ein kleines Team ausführt.",
+   bsp:"Zum Beispiel Gartenpflege für ältere Menschen im Viertel.",
+   lauf:"Monat", laeufe:10, start:[500,2500],
+   f:{team:1,handwerk:1,ort:1},
+   calc:{preis:30,kosten:4,stueck:20,stand:0,lohn:16,teamStd:22,meineStd:2,fix:25},
+   taetig:"Dienstleistungen rund um Haus und Garten"},
+  {id:"ausschank",n:"Ausschank auf Festen",form:"tropfen",
+   kurz:"Ein Getränke- oder Imbissstand auf Festen, mit Team. Hier gelten die meisten Regeln.",
+   bsp:"Zum Beispiel heißer Apfelpunsch ohne Alkohol auf dem Weihnachtsmarkt.",
+   lauf:"Festtag", laeufe:12, start:[1500,5000],
+   f:{markt:1,team:1,lebensmittel:1,offen:1,ausschank:1,ort:1},
+   calc:{preis:4,kosten:1.2,stueck:180,stand:120,lohn:15,teamStd:16,meineStd:1,fix:0},
+   taetig:"Ausschank von Getränken und Verkauf von Speisen auf Veranstaltungen"}
+];
+
+/* Bauteile eines Vorhabens. Jedes verlangt eine andere Art von Handlung. */
+const BAUTEILE = [
+  {id:"wahl",  n:"Gewählt",      verb:"wählen",     x:"Du hast eine Idee ausgesucht und ihr einen Namen gegeben."},
+  {id:"pass",  n:"Geprüft",      verb:"prüfen",     x:"Die Rechnung geht auf, das Startgeld passt zu deinem Rahmen, und du hast die Passung zu deinen Werten angesehen."},
+  {id:"amt",   n:"Angemeldet",   verb:"erledigen",  x:"Alle Schritte, die vor dem Start nötig sind, sind erledigt."},
+  {id:"prod",  n:"Ausgestaltet", verb:"beauftragen",x:"Es gibt ein Produkt- oder Angebotskonzept, das andere umsetzen können."},
+  {id:"team",  n:"Übertragen",   verb:"übertragen", x:"Jemand führt den Alltag. Oder du hast bewusst entschieden, es allein zu tun."},
+  {id:"lauf",  n:"Erprobt",      verb:"erleben",    x:"Ein erster Lauf ist abgerechnet."},
+  {id:"traegt",n:"Trägt sich",   verb:"bestätigen", x:"Zwei Läufe mit Gewinn, bei denen du selbst kaum noch Zeit gebraucht hast."}
+];
+
+/* Pflichtschritte. w = wann (vor, team, laufend, exit). wer = Stelle.
+   wenn(p,f) entscheidet, ob der Schritt für dieses Vorhaben gilt.
+   Texte sind Orientierung, keine Rechtsberatung. */
+const PFLICHTEN = [
+  {id:"ag", w:"vor", wer:"Arbeitgeber", t:"Nebentätigkeit beim Arbeitgeber anzeigen",
+   wenn:(p)=>p.beruf==="ang",
+   x:"Viele Arbeitsverträge verlangen, dass du eine Nebentätigkeit vorher anzeigst. Verbieten darf der Arbeitgeber sie nur, wenn sie dem Hauptjob schadet, etwa durch Konkurrenz oder Übermüdung.",
+   wie:"Schau in deinen Arbeitsvertrag. Schreib eine kurze, sachliche Mail mit Tätigkeit und Zeitumfang und heb die Antwort auf.", auftrag:"a_ag"},
+  {id:"beamt", w:"vor", wer:"Dienstherr", t:"Nebentätigkeit genehmigen lassen",
+   wenn:(p)=>p.beruf==="beamt",
+   x:"Beamtinnen und Beamte brauchen für die meisten gewerblichen Nebentätigkeiten eine Genehmigung. Die Regeln stehen im Beamtengesetz deines Landes ({land}).",
+   wie:"Antrag über die Personalstelle stellen, mit Tätigkeit, Zeitumfang und erwarteter Vergütung. Erst nach der Genehmigung anfangen."},
+  {id:"kv", w:"vor", wer:"Krankenkasse", t:"Krankenversicherung klären",
+   wenn:(p)=>p.beruf==="stud"||p.beruf==="ohne",
+   x:"Wer familienversichert ist oder als Student versichert ist, kann diesen Status verlieren, wenn der Gewinn eine Grenze übersteigt oder die Tätigkeit zu groß wird.",
+   wie:"Ruf deine Krankenkasse an und nenne den erwarteten Monatsgewinn aus der Rechnung. Wer Bürgergeld oder Arbeitslosengeld bekommt, muss die Tätigkeit vorher dem Jobcenter oder der Arbeitsagentur melden."},
+  {id:"gew", w:"vor", wer:"Gewerbeamt", t:"Gewerbe anmelden",
+   wenn:(p,f)=>!f.kurs,
+   x:"Ein Gewerbe meldest du vor dem Start bei der Gemeinde an, in der du es betreibst. Die Gebühr legt die Gemeinde fest, meist liegt sie zwischen etwa 15 und 65 Euro. Danach informiert das Amt Finanzamt, IHK und weitere Stellen.",
+   wie:"Im Serviceportal deines Landes ({land}) oder deiner Stadt nach „Gewerbeanmeldung“ suchen. Die vorbereiteten Angaben findest du unter „Formulare“.", form:"gewa", auftrag:"a_amt"},
+  {id:"kursform", w:"vor", wer:"Finanzamt", t:"Klären, ob Kurse frei oder gewerblich sind",
+   wenn:(p,f)=>!!f.kurs,
+   x:"Wer selbst unterrichtet, ist oft freiberuflich und braucht kein Gewerbe. Wer Kurse organisiert und andere unterrichten lässt, betreibt meist ein Gewerbe. Das entscheidet das Finanzamt. Selbstständige Lehrtätigkeit kann rentenversicherungspflichtig sein, und bei Honorar-Kursleitungen droht Scheinselbstständigkeit.",
+   wie:"Im Fragebogen zur steuerlichen Erfassung die Tätigkeit genau beschreiben. Wenn das Finanzamt sie als Gewerbe einstuft, danach beim Gewerbeamt anmelden."},
+  {id:"fse", w:"vor", wer:"Finanzamt", t:"Fragebogen zur steuerlichen Erfassung senden",
+   wenn:()=>true,
+   x:"Das Finanzamt will {frist} wissen, was du vorhast. Der Fragebogen läuft über ELSTER. Darin entscheidest du auch über die Kleinunternehmerregelung.",
+   wie:"Bei elster.de anmelden (das Konto braucht einige Tage) und unter „Formulare“ den Fragebogen für Einzelunternehmen wählen. Die Werte aus der Rechnung stehen unter „Formulare“ bereit.", link:"https://www.elster.de", form:"fse"},
+  {id:"ku", w:"vor", wer:"Finanzamt", t:"Über die Kleinunternehmerregelung entscheiden",
+   wenn:()=>true,
+   x:"Bleibt dein Umsatz im Vorjahr unter {kuV} Euro und im laufenden Jahr unter {kuL} Euro (netto), musst du keine Umsatzsteuer berechnen. Im Gründungsjahr gilt nur die Grenze von {kuV} Euro. Dafür bekommst du auch keine Vorsteuer zurück. Wer verzichtet, ist fünf Jahre gebunden.",
+   wie:"Die Rechnung zeigt dir den erwarteten Jahresumsatz aller Vorhaben zusammen. Für Verkäufe an Privatleute ist die Regelung meist günstiger."},
+  {id:"haft", w:"vor", wer:"Versicherung", t:"Betriebshaftpflicht abschließen",
+   wenn:(p,f)=>f.markt||f.team||f.verleih||f.lebensmittel||f.kurs,
+   x:"Wenn jemand am Stand stolpert oder ein verliehenes Rad versagt, haftest du. Viele Veranstalter verlangen den Nachweis einer Betriebshaftpflicht.",
+   wie:"Zwei oder drei Angebote vergleichen und auf die Tätigkeit achten, die im Vertrag steht."},
+  {id:"platz", w:"vor", wer:"Veranstalter", t:"Standplatz bewerben",
+   wenn:(p,f)=>!!f.markt,
+   x:"Weihnachtsmärkte vergeben ihre Plätze oft schon im Frühjahr oder Sommer. Auf behördlich festgesetzten Märkten brauchst du meist keine Reisegewerbekarte. Wer ohne festen Markt von Ort zu Ort verkauft, braucht sie in der Regel.",
+   wie:"Mit dem Auftrag „Passende Märkte finden“ Fristen und Kontakte sammeln und mit „Standbewerbung schreiben“ die Bewerbung vorbereiten.", auftrag:"a_markt"},
+  {id:"lmreg", w:"vor", wer:"Lebensmittelüberwachung", t:"Als Lebensmittelbetrieb registrieren",
+   wenn:(p,f)=>!!f.lebensmittel,
+   x:"Wer Lebensmittel verkauft, muss sich bei der Lebensmittelüberwachung registrieren lassen, auch bei kleinen Mengen.",
+   wie:"Die Stelle sitzt beim Kreis oder bei der kreisfreien Stadt. Oft genügt ein kurzes Formular."},
+  {id:"ifsg", w:"vor", wer:"Gesundheitsamt", t:"Belehrung nach dem Infektionsschutzgesetz",
+   wenn:(p,f)=>!!f.offen,
+   x:"Wer offene Lebensmittel ausgibt, braucht vor dem ersten Einsatz eine Belehrung durch das Gesundheitsamt (§ 43 IfSG). Das gilt auch für dein Team.",
+   wie:"Viele Gesundheitsämter bieten die Belehrung online an. Die Bescheinigung darf bei Arbeitsbeginn höchstens drei Monate alt sein und muss am Stand vorliegen. Danach belehrst du dein Team alle zwei Jahre selbst und hältst das schriftlich fest."},
+  {id:"allerg", w:"vor", wer:"Lebensmittelüberwachung", t:"Allergene kennzeichnen",
+   wenn:(p,f)=>!!f.lebensmittel,
+   x:"Auch bei loser Ware müssen die 14 Hauptallergene erkennbar sein, etwa auf einem Schild oder in einer Mappe am Stand.",
+   wie:"Für jedes Produkt eine Liste der Zutaten anlegen und die Allergene markieren."},
+  {id:"gast", w:"vor", wer:"Ordnungsamt", t:"Ausschank nach Landesrecht klären",
+   wenn:(p,f)=>!!f.ausschank,
+   x:"Das Gaststättenrecht ist Ländersache. In {land} gilt entweder das Bundesgesetz oder ein eigenes Landesgesetz. Für Alkohol auf Festen braucht man oft eine vorübergehende Gestattung.",
+   wie:"Mit dem Auftrag „Landesregeln prüfen“ die Lage für dein Land klären und dann beim Ordnungsamt nachfragen.", auftrag:"a_land"},
+  {id:"hwk", w:"vor", wer:"Handwerkskammer", t:"Prüfen, ob die Handwerkskammer zuständig ist",
+   wenn:(p,f)=>!!f.handwerk,
+   x:"Manche Dienstleistungen zählen als handwerksähnliches Gewerbe. Dann bist du Mitglied der Handwerkskammer statt der IHK. Meisterpflichtige Arbeiten sind ohne Meister nicht erlaubt.",
+   wie:"Die Tätigkeit genau beschreiben und die Handwerkskammer fragen. Das Gewerbeamt hilft bei der Einordnung."},
+  {id:"lucid", w:"vor", wer:"Zentrale Stelle Verpackungsregister", t:"Im Verpackungsregister LUCID eintragen",
+   wenn:(p,f)=>!!(f.versand||f.markt||f.lebensmittel),
+   x:"Wer verpackte Ware an Privatleute abgibt, ob per Post oder am Stand, muss vor dem ersten Verkauf im Register LUCID eingetragen sein. Das gilt auch für Tüten und Becher am Stand.",
+   wie:"Die Registrierung ist kostenlos. Versandverpackungen musst du zusätzlich bei einem System lizenzieren. Serviceverpackungen wie Tüten kannst du oft schon lizenziert beim Händler kaufen.", link:"https://lucid.verpackungsregister.org"},
+  {id:"recht", w:"vor", wer:"Eigene Seite", t:"Impressum, Widerruf und Datenschutz",
+   wenn:(p,f)=>!!f.versand,
+   x:"Ein Shop braucht ein Impressum, eine Widerrufsbelehrung, seit 19. Juni 2026 auch einen Widerrufsbutton, und eine Datenschutzerklärung. Fehler hier werden oft abgemahnt.",
+   wie:"Generatoren von IHK oder Verbraucherzentralen nutzen und die Texte prüfen lassen."},
+  {id:"gpsr", w:"vor", wer:"Eigene Seite", t:"Produktsicherheit und Kennzeichnung",
+   wenn:(p,f)=>!!f.produkt||!!f.markt,
+   x:"Seit Ende 2024 gilt die EU-Produktsicherheitsverordnung. Auf Produkt oder Verpackung stehen Name und Anschrift des Herstellers. Bei Kerzen, Spielzeug, Kosmetik oder Dingen mit Lebensmittelkontakt, etwa Wachstüchern, gelten zusätzliche Pflichten.",
+   wie:"Mit dem Auftrag „Produktkonzept ausarbeiten“ auch die Kennzeichnungspflichten für das konkrete Produkt abfragen."},
+  {id:"kasse", w:"vor", wer:"Finanzamt", t:"Kasse und Belege einrichten",
+   wenn:()=>true,
+   x:"Jede Einnahme braucht einen Beleg. Eine offene Ladenkasse mit täglichem Kassenbericht ist erlaubt. Eine elektronische Kasse braucht eine zertifizierte Sicherheitseinrichtung (TSE) und muss dem Finanzamt gemeldet werden.",
+   wie:"Ein Geschäftskonto getrennt vom Privatkonto anlegen. Ein Kartenterminal ohne Kassenfunktion ist möglich. Kartenumsätze zeichnest du getrennt vom Bargeld auf. Eine Kassen-App auf dem Handy braucht eine TSE und muss innerhalb eines Monats gemeldet werden."},
+  {id:"bnr", w:"team", wer:"Bundesagentur für Arbeit", t:"Betriebsnummer beantragen",
+   wenn:(p,f)=>!!f.team,
+   x:"Bevor du jemanden beschäftigst, brauchst du eine Betriebsnummer. Sie ist kostenlos.",
+   wie:"Online beim Betriebsnummern-Service der Bundesagentur für Arbeit beantragen."},
+  {id:"mini", w:"team", wer:"Minijob-Zentrale", t:"Team bei der Minijob-Zentrale melden",
+   wenn:(p,f)=>!!f.team,
+   x:"Für Saisonarbeit passt oft die kurzfristige Beschäftigung: höchstens drei Monate oder {kurz} Arbeitstage im Jahr, dann ohne Sozialabgaben. Für dauerhafte Hilfe passt der Minijob bis {mini} Euro im Monat, dafür zahlst du rund {abg} Prozent Pauschalabgaben plus Unfallversicherung. Im Ausschank gilt die Sofortmeldung spätestens bei Arbeitsbeginn, und das Team muss einen Ausweis dabeihaben.",
+   wie:"Vor Arbeitsbeginn melden. Bei Minijobs und kurzfristiger Beschäftigung die Arbeitszeit aufzeichnen. Es gilt der Mindestlohn von {ml} Euro.", link:"https://www.minijob-zentrale.de"},
+  {id:"bg", w:"vor", wer:"Berufsgenossenschaft", t:"Bei der Berufsgenossenschaft anmelden",
+   wenn:()=>true,
+   x:"Jedes Unternehmen meldet sich binnen einer Woche nach Beginn bei der zuständigen Berufsgenossenschaft, auch ohne Beschäftigte (§ 192 SGB VII). Wer später ein Team hat, ist dort automatisch unfallversichert.",
+   wie:"Welche Berufsgenossenschaft zuständig ist, hängt von der Branche ab. Die DGUV-Hotline nennt sie dir."},
+  {id:"schein", w:"team", wer:"Rentenversicherung", t:"Scheinselbstständigkeit ausschließen",
+   wenn:(p,f)=>!!f.team,
+   x:"Wenn eine Standleitung als „freie“ Kraft arbeitet, aber feste Zeiten, Weisungen und nur dich als Auftraggeber hat, ist sie in Wahrheit angestellt. Dann drohen Nachzahlungen.",
+   wie:"Im Zweifel Minijob oder kurzfristige Beschäftigung wählen. Für echte Selbstständige gibt es das Statusfeststellungsverfahren der Rentenversicherung."},
+  {id:"euer", w:"laufend", wer:"Finanzamt", t:"Jährlich Gewinn ermitteln und erklären",
+   wenn:()=>true,
+   x:"Einmal im Jahr ermittelst du den Gewinn mit der Einnahmenüberschussrechnung (Anlage EÜR). Als Arbeitnehmer bist du zur Steuererklärung verpflichtet, sobald Nebeneinkünfte {haerte} Euro übersteigen, oder schon aus anderen Gründen, etwa bei Steuerklasse III und V. Gewerbesteuer fällt erst über {gew} Euro Gewerbeertrag an.",
+   wie:"Belege laufend sammeln. Buchungsbelege acht Jahre, Bücher zehn Jahre aufbewahren."},
+  {id:"ihk", w:"laufend", wer:"IHK", t:"IHK-Mitgliedschaft verstehen",
+   wenn:(p,f)=>!f.handwerk,
+   x:"Mit der Gewerbeanmeldung wirst du automatisch IHK-Mitglied, sofern du nicht zur Handwerkskammer gehörst. Bis {ihk} Euro Gewerbeertrag im Jahr zahlen Einzelunternehmer ohne Handelsregistereintrag keinen Beitrag.",
+   wie:"Der erste Bescheid kommt von selbst. Nichts tun, nur prüfen."},
+  {id:"vertrag", w:"exit", wer:"Käuferin oder Käufer", t:"Übergabevertrag schließen",
+   wenn:()=>true,
+   x:"Ein schriftlicher Vertrag regelt, was übergeht: Inventar, Name, Lieferkontakte, Standplatzzusagen und den Preis. Kundendaten gehen in der Regel nur mit Einwilligung der Kunden über, Bankdaten immer nur mit Einwilligung.",
+   wie:"Mit dem Auftrag „Übergabevertrag entwerfen“ einen Entwurf machen und ihn prüfen lassen.", auftrag:"a_vertrag2"},
+  {id:"betrueb", w:"exit", wer:"Team", t:"Team über den Übergang informieren",
+   wenn:(p,f)=>!!f.team,
+   x:"Wenn ein Betrieb mit Beschäftigten übergeht, gehen deren Arbeitsverhältnisse in der Regel mit über (§ 613a BGB). Das Team muss vorher in Textform informiert werden und kann binnen eines Monats widersprechen.",
+   wie:"Das Informationsschreiben gehört zum Übergabevertrag."},
+  {id:"abm", w:"exit", wer:"Gewerbeamt", t:"Gewerbe abmelden",
+   wenn:(p,f)=>!f.kurs,
+   x:"Nach der Übergabe meldest du das Gewerbe ab, wenn du keine anderen Vorhaben darunter führst. Die neue Person meldet ihr eigenes Gewerbe an.",
+   wie:"Wie die Anmeldung, im Serviceportal deines Landes."},
+  {id:"vg", w:"exit", wer:"Finanzamt", t:"Verkaufserlös in der Steuererklärung angeben",
+   wenn:()=>true,
+   x:"Kaufpreis minus Kosten des Verkaufs minus Buchwert ergibt den Veräußerungsgewinn. Er gehört in die Steuererklärung des Jahres. Umsatzsteuer fällt meist nicht an, weil der ganze Betrieb übergeht.",
+   wie:"Kaufvertrag und Inventarliste zu den Belegen legen."}
+];
+
+const PFLICHT_PHASEN = {vor:"Vor dem Start", team:"Wenn ein Team dazukommt", laufend:"Im laufenden Betrieb", exit:"Bei der Übergabe"};
+
+/* Aufträge an Claude. Die Vorlage wird mit dem Kontext gefüllt (kein Name, kein Vermögen).
+   phase = ab welchem Bauteil der Auftrag passt, out = welches Bauteil er unterstützt. */
+const AUFTRAEGE = [
+  {id:"a_markt", t:"Passende Märkte finden", f:"markt", out:"amt",
+   p:"Ich plane als Nebenerwerb ein Vorhaben „{name}“ ({vorlage}) in der Region {ort} ({land}). Finde 6 bis 10 passende Märkte (zum Beispiel Weihnachtsmärkte) im Umkreis von 40 km. Nenne je Markt: Zeitraum, Veranstalter, Bewerbungsfrist, ungefähre Standgebühr, Kontakt und Link. Markiere, wo die Frist schon vorbei ist."},
+  {id:"a_bewerb", t:"Standbewerbung schreiben", f:"markt", out:"amt",
+   p:"Schreib eine kurze, freundliche Standbewerbung für den Markt, den ich unten nenne. Mein Vorhaben: „{name}“, {kurz}. Hebe hervor, was der Stand für den Markt beiträgt (Nachhaltigkeit, Regionalität). Platz für Fotos und Maße als Platzhalter lassen.\n\nMarkt: "},
+  {id:"a_konzept", t:"Produktkonzept ausarbeiten", out:"prod",
+   p:"Entwickle für mein Nebenerwerbs-Vorhaben „{name}“ ({vorlage}) ein Produkt- oder Angebotskonzept mit drei Varianten. Für jede Variante: Beschreibung, Materialien, möglichst nachhaltige Herstellung, geschätzte Stückkosten, sinnvoller Verkaufspreis, und welche Kennzeichnungspflichten in Deutschland gelten. Empfiehl eine Variante. Rahmen: {rechnung}"},
+  {id:"a_herst", t:"Herstellung vergeben", out:"prod",
+   p:"Ich möchte das Produkt für „{name}“ nicht selbst herstellen. Suche in {ort} ({land}) und Umgebung mögliche Fertiger: kleine Manufakturen, Werkstätten für Menschen mit Behinderung, Handwerksbetriebe. Nenne je Kandidat: was sie können, Kontakt, und welche Fragen ich beim ersten Gespräch stellen sollte. Produkt: {kurz}"},
+  {id:"a_stelle", t:"Standleitung suchen", f:"team", out:"team",
+   p:"Schreib eine kurze Stellenanzeige für eine Standleitung oder Betreuung meines Vorhabens „{name}“ ({vorlage}) in {ort}. Beschäftigungsform: Minijob oder kurzfristige Beschäftigung, Mindestlohn {ml} € oder mehr. Die Person soll den Alltag selbstständig führen. Nenne zusätzlich drei Orte, an denen ich die Anzeige veröffentlichen kann."},
+  {id:"a_vertrag", t:"Vereinbarung fürs Team entwerfen", f:"team", out:"team",
+   p:"Entwirf einen einfachen Arbeitsvertrag für eine {form} in Deutschland (Stand {stand}) für die Standleitung meines Vorhabens „{name}“. Lohn mindestens {ml} € pro Stunde, Aufzeichnung der Arbeitszeit, klare Aufgaben, Kassenverantwortung, Kündigung. Markiere, welche Stellen ich prüfen lassen sollte."},
+  {id:"a_handbuch", t:"Ablauf-Handbuch für das Team", out:"team",
+   p:"Schreib ein kurzes Ablauf-Handbuch, damit eine Standleitung mein Vorhaben „{name}“ ({vorlage}) ohne mich führen kann: Aufbau, Kasse und Kassenbericht, Nachschub, Hygiene falls nötig, was bei Problemen zu tun ist, und wann sie mich anrufen soll. Höchstens zwei Seiten."},
+  {id:"a_amt", t:"Zuständige Stellen finden", out:"amt",
+   p:"Ich wohne in {ort} ({land}) und will nebenberuflich „{name}“ ({taetig}) starten. Nenne mir die zuständigen Stellen mit Adresse, Online-Portal und Gebühren: Gewerbeamt, Finanzamt, Ordnungsamt{lm}. Sag mir, ob die Gewerbeanmeldung online geht."},
+  {id:"a_land", t:"Landesregeln prüfen", out:"amt",
+   p:"Welche Regeln des Landes {land} betreffen mein Vorhaben „{name}“ ({taetig})? Prüfe besonders: Gaststättenrecht und Ausschank auf Festen, Verkauf an Sonn- und Feiertagen, Marktrecht der Gemeinden, und falls ich verbeamtet bin, das Nebentätigkeitsrecht. Nenne die Gesetze mit Link. Stand {stand}."},
+  {id:"a_kalk", t:"Rechnung prüfen", out:"pass",
+   p:"Prüfe die Rechnung meines Nebenerwerbs-Vorhabens „{name}“ ({vorlage}) kritisch: {rechnung}. Was fehlt, was ist zu optimistisch, und wo liegt die Gewinnschwelle? Antworte in einer kurzen Liste."},
+  {id:"a_nachhaltig", t:"Nachhaltiger machen", out:"pass",
+   p:"Wie kann mein Vorhaben „{name}“ ({kurz}) nachhaltiger werden, ohne viel Aufwand? Gehe Material, Wege, Verpackung, Haltbarkeit und Reste durch und nenne je Punkt die wirksamste Änderung. Ordne nach Wirkung, das Große zuerst."},
+  {id:"a_ag", t:"Mail an den Arbeitgeber", out:"amt",
+   p:"Schreib mir eine kurze, sachliche Mail an meinen Arbeitgeber, in der ich eine Nebentätigkeit anzeige: „{name}“ ({taetig}), etwa {std} Stunden pro Woche, außerhalb der Arbeitszeit, keine Konkurrenz zum Arbeitgeber. Freundlich, ohne um Erlaubnis zu betteln."},
+  {id:"a_expose", t:"Übergabe-Exposé schreiben", out:"exit",
+   p:"Schreib ein kurzes Exposé, um mein laufendes Vorhaben „{name}“ ({vorlage}) an eine Person zu übergeben, die es selbst weiterführen will. Kennzahlen: {rechnung}. Bisherige Läufe: {laeufe}. Inhalt: was übergeht, was es einbringt, wie viel Zeit es braucht, Preisvorstellung {preis}."},
+  {id:"a_vertrag2", t:"Übergabevertrag entwerfen", out:"exit",
+   p:"Entwirf einen einfachen Kaufvertrag für die Übergabe meines Kleingewerbes „{name}“ ({taetig}) an eine Privatperson in Deutschland. Inhalt: Inventarliste als Anlage, Name und Auftritt, Lieferkontakte, Standplatzzusagen, Kaufpreis {preis}, Zahlung, Gewährleistung ausgeschlossen soweit zulässig{team}. Markiere, was eine Fachperson prüfen sollte."}
+];
+
+/* Wissen: kurze, belegte Grundlagen. ev = Belegstärke (0 Denkanstoß, 1 vorläufig, 2 solide, 3 gut belegt / Gesetz). */
+const WISSEN = [
+  {id:"w1",bereich:"leben",t:"Beziehungen tragen länger als Erträge",
+   x:"Eine Auswertung von 148 Studien mit über 300.000 Menschen fand, dass starke soziale Beziehungen die Überlebenschance über die Studienzeit um etwa 50 Prozent erhöhten. Der Effekt war ähnlich groß wie der des Nichtrauchens.",
+   c:"Es sind Beobachtungsdaten. Sie zeigen einen Zusammenhang, keinen sicheren Beweis für die Ursache.",
+   src:"Holt-Lunstad, Smith & Layton (2010), PLoS Medicine", u:"https://doi.org/10.1371/journal.pmed.1000316", ev:3},
+  {id:"w2",bereich:"leben",t:"Gekaufte Zeit macht zufriedener als gekaufte Dinge",
+   x:"In Befragungen und einem Feldexperiment waren Menschen zufriedener, wenn sie Geld ausgaben, um sich lästige Arbeit abnehmen zu lassen, als wenn sie dasselbe Geld für Dinge ausgaben.",
+   c:"Die Effekte sind klein. Für die Nebenexistenz heißt das: Erträge sollen dir Zeit schenken, nicht neue Arbeit erzeugen.",
+   src:"Whillans et al. (2017), PNAS", u:"https://doi.org/10.1073/pnas.1706541114", ev:2},
+  {id:"w3",bereich:"leben",t:"Die längste Glücksstudie zeigt auf Beziehungen",
+   x:"Die Harvard Study of Adult Development begleitet Menschen seit 1938. Die Qualität enger Beziehungen sagte Gesundheit und Zufriedenheit im Alter besser voraus als Einkommen oder Status.",
+   c:"Die ersten Teilnehmer waren nur Männer: Harvard-Studenten und Jungen aus Bostoner Arbeitervierteln. Spätere Generationen sind breiter gemischt.",
+   src:"Waldinger & Schulz (2023), The Good Life", u:"https://www.adultdevelopmentstudy.org", ev:2},
+  {id:"w4",bereich:"geld",t:"Die Kleinunternehmerregelung",
+   x:"Bleibt der Umsatz im Vorjahr unter 25.000 Euro und im laufenden Jahr unter 100.000 Euro (netto), wird keine Umsatzsteuer erhoben. Im Gründungsjahr gilt nur die Grenze von 25.000 Euro. Die 100.000-Euro-Grenze wirkt seit 2025 sofort: Der Umsatz, der sie überschreitet, ist schon steuerpflichtig.",
+   c:"Alle Vorhaben unter deinem Namen zählen zusammen.",
+   src:"§ 19 UStG, Fassung seit 1.1.2025", u:"https://www.gesetze-im-internet.de/ustg_1980/__19.html", ev:3},
+  {id:"w5",bereich:"geld",t:"Saisonhilfe ohne Sozialabgaben",
+   x:"Eine kurzfristige Beschäftigung ist auf drei Monate oder 70 Arbeitstage im Kalenderjahr begrenzt. Dann fallen keine Sozialabgaben an, unabhängig vom Verdienst. Sie passt gut zur Weihnachtsmarktsaison.",
+   c:"Sie darf nicht berufsmäßig ausgeübt werden. Mehrere kurzfristige Jobs einer Person werden zusammengerechnet. Lohnsteuer fällt trotzdem an.",
+   src:"§ 8 SGB IV, Minijob-Zentrale", u:"https://www.minijob-zentrale.de", ev:3},
+  {id:"w6",bereich:"geld",t:"Der Minijob 2026",
+   x:"Seit Januar 2026 liegt die Verdienstgrenze bei 603 Euro im Monat, gekoppelt an den Mindestlohn von 13,90 Euro. Das sind etwa 43 Stunden im Monat. Im gewerblichen Bereich zahlst du rund 31 Prozent Pauschalabgaben.",
+   c:"2027 steigt der Mindestlohn auf 14,60 Euro und die Grenze auf 633 Euro.",
+   src:"Fünfte Mindestlohnanpassungsverordnung, Minijob-Zentrale", u:"https://www.minijob-zentrale.de", ev:3},
+  {id:"w7",bereich:"geld",t:"Kleine Gewinne, kleine Pflichten",
+   x:"Als Arbeitnehmer bleibst du bis 410 Euro Nebeneinkünften im Jahr ohne Erklärungspflicht, wenn kein anderer Grund eine Erklärung verlangt. Gewerbesteuer fällt für Einzelunternehmen erst über 24.500 Euro Gewerbeertrag an. Den IHK-Beitrag zahlst du erst über 5.200 Euro.",
+   c:"Die Grenzen gelten für den Gewinn, nicht für den Umsatz.",
+   src:"§ 46 EStG, § 11 GewStG, § 3 IHKG", u:"https://www.gesetze-im-internet.de/estg/__46.html", ev:3},
+  {id:"w8",bereich:"geld",t:"Wer mit Team verkauft, übergibt das Team mit",
+   x:"Wird ein Betrieb an jemand anderen übertragen, gehen die Arbeitsverhältnisse in der Regel auf die neue Inhaberin über. Das schützt dein Team bei einer Übergabe.",
+   c:"Das Team muss vorher informiert werden und kann widersprechen.",
+   src:"§ 613a BGB", u:"https://www.gesetze-im-internet.de/bgb/__613a.html", ev:3},
+  {id:"w9",bereich:"sinn",t:"Mehr Geld, wenig mehr Glück?",
+   x:"Eine große Studie mit Tageserhebungen fand, dass das Wohlbefinden für die meisten Menschen mit dem Einkommen weiter steigt, auch über 75.000 Dollar. Für eine unglückliche Minderheit flachte die Kurve aber ab.",
+   c:"Die Zuwächse werden mit jedem Euro kleiner. Wer schon genug hat, gewinnt mehr durch Zeit und Beziehungen.",
+   src:"Killingsworth, Kahneman & Mellers (2023), PNAS", u:"https://doi.org/10.1073/pnas.2208661120", ev:2}
+];
+
+/* Biotop-Fragen: kurzer Nachhaltigkeitsblick je Vorhaben */
+const BIO_FRAGEN = [
+  {id:"mat",t:"Material",q:"Bestehen die Produkte aus langlebigen, recycelten oder nachwachsenden Stoffen?"},
+  {id:"weg",t:"Wege",q:"Kommen Ware und Team ohne lange Autofahrten aus?"},
+  {id:"pack",t:"Verpackung",q:"Kommt das Vorhaben mit wenig oder wiederverwendbarer Verpackung aus?"},
+  {id:"halt",t:"Haltbarkeit",q:"Halten die Produkte lange oder lassen sie sich reparieren?"},
+  {id:"rest",t:"Reste",q:"Gibt es einen Plan für Reste und Unverkauftes?"}
+];
+
+/* Leben-Seite: Vorschläge für den nächsten Schritt an Tagen ohne Steuerzeit */
+const LEBEN_IMPULSE = [
+  "Ruf {p} an, einfach so.",
+  "Schreib {p} eine kurze Nachricht, ohne Anliegen.",
+  "Verabrede dich mit {p} für diese Woche.",
+  "Frag {p}, wie es wirklich geht, und hör zu.",
+  "Plan mit {p} etwas, das nichts mit Geld zu tun hat."
+];
