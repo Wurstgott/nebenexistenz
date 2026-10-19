@@ -70,15 +70,16 @@ function calc(v){
   const jahrK=n0(c.jahr);
   const jahrU=umsatz*effL, jahrG=gewinn*effL-jahrK;
   const meine=n0(c.meineStd);
-  const proStd=meine>0?gewinn/meine:null;
+  const proStd=meine>0?jahrG/(meine*laeufe*AUSFALL):null;
   const start=n0(c.start);
   const amort=gewinn>0?Math.ceil(start/gewinn):null;
   const wochenStd=meine*laeufe/52;
   const saison=t.lauf==="Markttag"||t.lauf==="Festtag";
-  const kapital=Math.round(start+(saison?n0(c.stand)*laeufe+0.4*ware*laeufe:2*(ware+n0(c.stand)+n0(c.fix)))+jahrK);
+  const kapital=Math.round((start+(saison?0.5*n0(c.stand)*laeufe+0.25*ware*laeufe:2*(ware+n0(c.stand)+n0(c.fix)))+jahrK)/50)*50;
   const ruecklage=Math.max(0,jahrG)*0.3;
   return{umsatz,ware,schwund,personal,prov,kosten,gewinn,laeufe,effL,jahrK,jahrU,jahrG,meine,proStd,start,amort,wochenStd,abg,ruecklage,kapital,saison};
 }
+function tplKapital(t){return calc({tpl:t.id,calc:Object.assign({form:t.f.team?(t.besch||"mini"):"keine",laeufe:t.laeufe,start:Math.round((t.start[0]+t.start[1])/2/100)*100},t.calc),runs:[],team:[]}).kapital}
 function rahmen(){
   const p=S.prof, mon=(p.beruf==="ang"||p.beruf==="oed"||p.beruf==="beamt")?3:6, notgroschen=mon*n0(p.fix), frei=Math.max(0,n0(p.ruecklage)-notgroschen);
   const erstes=S.ventures.length<=1;
@@ -343,13 +344,13 @@ function viewHome(){
   let s=`<h1 class="vh">Nebenexistenz</h1><div class="stage">${mobileSVG()}</div>${balanceLine()}`;
   if(S.demo) s+=`<div class="banner"><span>Du siehst Beispieldaten.</span><button class="btn small ghost" data-a="demoOff">Beispiel löschen</button></div>`;
   s+=stepCard(st);
-  if(h) s+=`<div class="sec"><div class="note neben"><strong>${esc(h.t)}</strong><span>${esc(h.x)}</span><div><button class="linkbtn" data-a="hintOff" data-id="${h.id}">Passt so</button></div></div></div>`;
   const act=aktive();
   if(act.length){
     s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Hängt gerade</span></div><div class="list">`;
     act.forEach(v=>{const n=stage(v);s+=`<button class="li" data-a="venture" data-id="${v.id}"><span class="grow"><span class="t">${esc(v.name)}</span><span class="s">${BAUTEILE[n-1].n} · ${n} von 7 Bauteilen</span><span class="parts" aria-hidden="true">${BAUTEILE.map((b,i)=>`<i class="part ${i<n?"on":i===n?"nx":""}"></i>`).join("")}</span></span><span class="chev"></span></button>`});
     s+=`</div></div>`;
   }
+  if(h) s+=`<div class="sec"><div class="note neben"><strong>${esc(h.t)}</strong><span>${esc(h.x)}</span><div><button class="linkbtn" data-a="hintOff" data-id="${h.id}">Passt so</button></div></div></div>`;
   s+=`<div class="sec"><div class="chips"><button class="btn ghost small" data-a="sheet" data-id="time">Vorhabenzeit eintragen</button>${isVorhabentag()?`<span class="pill info">Heute ist Vorhabentag</span>`:`<span class="pill">Heute ist ${WTL[new Date().getDay()]}, kein Vorhabentag</span>`}</div></div>`;
   s+=foot();
   return s;
@@ -514,7 +515,7 @@ const SHEETS={
 
   neu(){return`${head("Neues Vorhaben","Was soll nebenher laufen?")}
     <p class="muted small">Jede Vorlage bringt eigene Pflichtschritte, Startwerte für die Rechnung und passende Aufträge mit. Du gibst ihr gleich einen eigenen Namen.</p>
-    <div class="stack">${VORLAGEN.map(t=>`<button class="card" data-a="pickTpl" data-id="${t.id}"><span style="display:flex;gap:12px;align-items:center"><svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><path d="${shapePath(t.form,17,17,11)}" fill="var(--neben)"/></svg><span><span class="t" style="font:650 17px/1.25 var(--f-ui);display:block">${esc(t.n)}</span><span class="mono">Start etwa ${eur(t.start[0])} bis ${eur(t.start[1])}</span></span></span><span class="small">${esc(t.kurz)}</span><span class="small muted">${esc(t.bsp)}</span></button>`).join("")}</div>`},
+    <div class="stack">${VORLAGEN.map(t=>`<button class="card" data-a="pickTpl" data-id="${t.id}"><span style="display:flex;gap:12px;align-items:center"><svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><path d="${shapePath(t.form,17,17,11)}" fill="var(--neben)"/></svg><span><span class="t" style="font:650 17px/1.25 var(--f-ui);display:block">${esc(t.n)}</span><span class="mono">Geld bis zum Start etwa ${eur(tplKapital(t))}</span></span></span><span class="small">${esc(t.kurz)}</span><span class="small muted">${esc(t.bsp)}</span></button>`).join("")}</div>`},
 
   name(o){const t=VORLAGEN.find(x=>x.id===o.tpl);
     return`${head(t.n,"Wie heißt es?")}<div class="field"><label for="f-vname">Name des Vorhabens</label><input id="f-vname" type="text" value="" placeholder="zum Beispiel Wachs & Docht" maxlength="40"></div>
@@ -602,7 +603,7 @@ const SHEETS={
       gewinn:["Gewinn im Jahr","Gewinn pro Lauf mal Läufe pro Jahr, wobei 15 Prozent der Läufe ausfallen (Wetter, Krankheit, Absagen), minus Kosten pro Jahr. Startkosten sind nicht abgezogen. Der Gewinn kommt zu deinem Einkommen und wird mit deinem persönlichen Steuersatz besteuert. Lege grob ein Viertel davon zurück."],
       zeit:["Vorhabenzeit","Alles, was du selbst für die Vorhaben tust, in den letzten sieben Tagen. Dein Rahmen sind "+S.prof.stunden+" Stunden pro Woche. Liegt die Zeit darüber, neigt sich das Mobile zu den Vorhaben."],
       menschen:["Menschen gesehen","Wie viele deiner nahen Menschen du in den letzten 14 Tagen eingetragen hast. Weniger als die Hälfte lässt das Mobile zu den Vorhaben kippen."],
-      kapital:["Geld bis zum Start","Was du vorstrecken musst, bevor Geld zurückkommt: Startkosten, Kosten pro Jahr und bei Saisonvorhaben die Standgebühren der Saison und etwa 40 Prozent der Saisonware, weil beides meist im Voraus bezahlt wird. Bei anderen Vorhaben zwei Läufe Vorlauf."],
+      kapital:["Geld bis zum Start","Was du vorstrecken musst, bevor Geld zurückkommt: Startkosten, Kosten pro Jahr und bei Saisonvorhaben etwa die Hälfte der Standgebühren der Saison und ein Viertel der Saisonware, weil beides teils im Voraus bezahlt wird. Bei anderen Vorhaben zwei Läufe Vorlauf."],
       deckel:["Wie viel Geld du einsetzen kannst","Von deinen Rücklagen bleiben feste Ausgaben als Notgroschen unberührt: drei Monate, wenn du angestellt oder verbeamtet bist, sonst sechs. Vom Rest schlagen wir für das erste Vorhaben höchstens 10 Prozent vor, für jedes weitere 15 Prozent und für alle zusammen 30 Prozent. Das erste Vorhaben ist auch Lehrgeld. Das ist eine Faustregel zur Vorsicht, keine Anlageberatung."]
     }[o.eid];
     return`${head("Erklärt",T[0])}<p>${esc(T[1])}</p>`},
@@ -687,7 +688,8 @@ const VSUB={
     ${v.passOk?`<p class="pill ok">Passung bestätigt am ${dateDE(v.passOk)}</p>`:""}
     <div class="wirehead"><span class="eyebrow">Passung zu deinen Werten</span></div>${werteBlock(v)}
     <div class="wirehead"><span class="eyebrow">Nachhaltigkeitsblick</span></div>${bioBlock(v)}
-    ${v.passOk?"":`<button class="btn wide" data-a="passOk" data-id="${v.id}">Passung bestätigen</button><p class="muted small">Damit sagst du: Ich habe Rechnung, Geldbedarf und Werte angesehen und will weitermachen.</p>`}
+    ${!v.passOk&&SH.passAsk?`<div class="note"><strong>Mehr Geld als empfohlen.</strong><span>Das Vorhaben braucht etwa ${eur(calc(v).kapital)} bis zum Start. Empfohlen sind ${eur(rahmen().deckel)}. Du kannst trotzdem bestätigen, wenn du das Geld bewusst einplanst und ein Verlust dich nicht belasten würde.</span></div>`:""}
+    ${v.passOk?"":`<button class="btn wide" data-a="passOk" data-id="${v.id}">${SH.passAsk?"Ja, bewusst bestätigen":"Passung bestätigen"}</button><p class="muted small">Damit sagst du: Ich habe Rechnung, Geldbedarf und Werte angesehen und will weitermachen.</p>`}
     <button class="btn ghost wide" data-a="auftrag" data-id="${v.id}" data-task="a_kalk">Rechnung von Claude prüfen lassen</button>`},
 
   pflichten(v){const ds=dutiesFor(v), n=stage(v);
@@ -754,7 +756,7 @@ function calcOut(v){const r=calc(v),t=tplOf(v),R=rahmen(),c=v.calc;
     <div class="fig"><span class="k">Gewinn pro ${esc(t.lauf)}</span><span class="v num ${r.gewinn<0?"neg":""}">${eur(r.gewinn)}</span><span class="e">Umsatz ${eur(r.umsatz)} minus Kosten ${eur(r.kosten)}</span></div>
     <button class="fig" data-a="explain" data-id="gewinn"><span class="k">Gewinn im Jahr</span><span class="v num ${r.jahrG<0?"neg":""}">${eur(r.jahrG)}</span><span class="e">bei etwa ${Math.round(r.effL)} von ${r.laeufe} Läufen, nach Jahreskosten</span></button>
     <div class="fig"><span class="k">Pro eigener Stunde</span><span class="v num">${r.proStd==null?"–":eur(r.proStd)}</span><span class="e">${r.wochenStd.toLocaleString("de-DE",{maximumFractionDigits:1})} Std. pro Woche im Schnitt</span></div>
-    <button class="fig" data-a="explain" data-id="kapital"><span class="k">Geld bis zum Start</span><span class="v num">${eur(r.kapital)}</span><span class="e">${r.saison?"Start, Standgebühren und Ware für die Saison":"Start und zwei Läufe Vorlauf"}</span></button></div>
+    <button class="fig" data-a="explain" data-id="kapital"><span class="k">Geld bis zum Start</span><span class="v num">${eur(r.kapital)}</span><span class="e">${r.saison?"Start, Anzahlung Stand, erste Ware":"Start und zwei Läufe Vorlauf"}</span></button></div>
     ${r.jahrG>0?`<p class="muted small">Leg etwa ${eur(r.ruecklage/12)} im Monat für die Einkommensteuer zurück, also grob 30 Prozent des Jahresgewinns. Nach der ersten Steuererklärung kommen oft Nachzahlung und Vorauszahlungen zusammen.</p>`:""}
     <p class="muted small">Gerechnet mit ${Math.round((1-AUSFALL)*100)} Prozent Ausfall bei den Läufen${r.schwund?", "+eur(r.schwund)+" Schwund pro "+esc(t.lauf):""}${r.prov?", "+eur(r.prov)+" Gebühren pro "+esc(t.lauf):""}${r.jahrK?" und "+eur(r.jahrK)+" Kosten pro Jahr für Versicherung, Konto und Beiträge":""}.${S.prof.ust?" Preise gelten als Bruttopreise, die Umsatzsteuer ist herausgerechnet.":""}</p>
     ${r.personal>0?`<p class="muted small">Team pro ${esc(t.lauf)}: ${eur(r.personal)}, ${(c.form||"kurz")==="mini"?"inklusive rund "+RECHT.minijobAbgabe+" Prozent Pauschalabgaben":"inklusive rund "+pct+" Prozent Umlagen. Keine Sozialabgaben, aber Lohnsteuer nach Steuermerkmalen oder pauschal 25 Prozent"}.</p>`:""}
@@ -905,7 +907,9 @@ const ACT={
   passOk:d=>{const v=vById(d.id),r=calc(v),R=rahmen();const no=m=>{const b=$("[data-a=passOk]");if(b){b.classList.add("shake");setTimeout(()=>b.classList.remove("shake"),350)}buzz("err");toast(m)};
     if(!(n0(v.calc.preis)>0&&n0(v.calc.stueck)>0)) return no("Trag zuerst Preis und Stückzahl ein.");
     if(r.gewinn<=0) return no("Die Rechnung zeigt noch keinen Gewinn. Ändere Preis oder Kosten.");
-    if(R.gesetzt&&r.kapital>R.deckel) return no("Das nötige Geld liegt über deinem Rahmen. Fang kleiner an oder pass den Rahmen an.");
+    if(R.gesetzt&&R.gebunden>R.gesamt&&r.kapital<=R.gesamt) return no("Alle Vorhaben zusammen brauchen mehr als 30 Prozent deines freien Geldes. Fang kleiner an.");
+    if(R.gesetzt&&r.kapital>R.gesamt) return no("Das nötige Geld liegt über 30 Prozent deines freien Geldes. Fang kleiner an oder spar vorher an.");
+    if(R.gesetzt&&r.kapital>R.deckel&&!SH.passAsk){SH.passAsk=true;renderSheet();const b=$("[data-a=passOk]");if(b)b.scrollIntoView({block:"center"});return}
     SH.sub="bauteile";v.passOk=today();save();renderSheet();render();buzz("ok");toast("Passung bestätigt.",null,true)},
   cform:d=>{const v=vById(d.vid);v.calc.form=d.id;save();renderSheet()},
   wert:d=>{const v=vById(d.id);v.werte[d.w]=v.werte[d.w]===d.val?undefined:d.val;if(!v.werte[d.w])delete v.werte[d.w];save();renderSheet()},
@@ -962,15 +966,15 @@ function copyText(tx,src){
 function loadDemo(){
   const keep=S.settings; S=fresh(); S.settings=keep; S.demo=true; S.onb=true;
   const d=k=>{const x=new Date();x.setDate(x.getDate()-k);return x.toISOString().slice(0,10)};
-  S.prof={land:"SN",ort:"Leipzig",beruf:"ang",netto:2900,fix:1700,ruecklage:14000,stunden:4,tage:[2,6]};
+  S.prof={land:"SN",ort:"Leipzig",beruf:"ang",netto:2900,fix:1700,ruecklage:30000,stunden:4,tage:[2,6]};
   S.pduties={ag:d(40),fse:d(30),ku:d(30),kasse:d(28),bg:d(30)};
   S.werte=["Gerechtigkeit","Nachhaltigkeit","Freiheit"];
   S.people=[{id:"p1",name:"Mia",last:d(2)},{id:"p2",name:"Jonas",last:d(5)},{id:"p3",name:"Mama",last:d(19)},{id:"p4",name:"Ali",last:d(9)}];
   const t=VORLAGEN[0];
   S.ventures=[{id:"v1",tpl:"markt",name:"Wachs & Docht",desc:"Bienenwachstücher und Kerzen auf zwei Leipziger Weihnachtsmärkten",created:d(60),passOk:d(50),
-    calc:Object.assign({},t.calc,{form:"kurz",laeufe:24,start:1400,inventar:900}),
+    calc:Object.assign({},t.calc,{form:"kurz",laeufe:24,start:1800,inventar:1200}),
     duties:{gew:d(35),haft:d(33),platz:d(45),gpsr:d(20),lucid:d(25)},prod:"Bienenwachstücher in drei Größen und Rapskerzen, gefertigt von einer Werkstatt für Menschen mit Behinderung in Leipzig-Grünau.",
-    team:[{id:"m1",name:"Standleitung Jana",form:"kurz",lohn:16}],runs:[{id:"r1",d:d(3),umsatz:640,kosten:390,meineStd:1.5,teamStd:9,note:"Regen am Nachmittag"}],
+    team:[{id:"m1",name:"Standleitung Jana",form:"kurz",lohn:16}],runs:[{id:"r1",d:d(3),umsatz:590,kosten:445,meineStd:1.5,teamStd:12,note:"Regen am Nachmittag"}],
     results:[],werte:{Gerechtigkeit:"passt",Nachhaltigkeit:"passt",Freiheit:"teils"},bio:{mat:"ja",weg:"ja",pack:"teils",halt:"ja",rest:"teils"}},
    {id:"v2",tpl:"verleih",name:"Lastenrad Ost",desc:"Ein Lastenrad und ein Anhänger zum Leihen im Leipziger Osten",created:d(12),
     calc:Object.assign({},VORLAGEN[2].calc,{form:"kurz",laeufe:12,start:2600,inventar:0}),duties:{},prod:"",team:[],runs:[],results:[],werte:{},bio:{}}];
