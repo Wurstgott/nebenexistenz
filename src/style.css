@@ -266,3 +266,4 @@ pre.prompt{white-space:pre-wrap;font:400 14px/1.5 var(--f-mono);background:var(-
 .seg{min-height:46px;flex-shrink:0}
 a.li{text-decoration:none;color:inherit}
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}input[type=number]{-moz-appearance:textfield}
+.grid2>.field{align-content:start}
