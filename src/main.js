@@ -1,7 +1,7 @@
 /* ===== Nebenexistenz · Logik ===== */
 const BUILD="__BUILD__";
 const KEY="nebenexistenz-v1";
-const GV=2;
+const GV=3;
 const MAX_AKTIV=3;
 const IN_FRAME=(()=>{try{return window.self!==window.top}catch(e){return true}})();
 
@@ -10,7 +10,7 @@ function fresh(){return{
   gv:GV, onb:false, demo:false,
   prof:{land:"", ort:"", beruf:"", netto:0, fix:0, ruecklage:0, stunden:4, tage:[2,6]},
   pduties:{}, werte:[], people:[], ventures:[], time:[], weeks:[],
-  settings:{theme:"auto", vib:true, apps:{wg:"https://wurstgott.github.io/wertegeruest/", bt:"https://wurstgott.github.io/biotop/", gk:"https://wurstgott.github.io/glueckskompass/"}},
+  settings:{theme:"auto", vib:true, apps:{wg:"https://wurstgott.github.io/fernweh/wertegeruest/", bt:"https://wurstgott.github.io/biotop/", gk:"https://wurstgott.github.io/fernweh/glueckskompass/"}},
   lv:{}, fresh:[], seen:{}, mq:[], hint:{d:"",id:""}, hintsOff:{}, opens:{d:"",n:0}, override:"", tab:"home"
 }}
 let S=fresh();
@@ -26,6 +26,9 @@ function deepMerge(base,o){
 function migrate(){
   S.ventures.forEach(v=>{ v.duties=v.duties||{}; v.team=v.team||[]; v.runs=v.runs||[]; v.results=v.results||[]; v.werte=v.werte||{}; v.bio=v.bio||{}; v.calc=Object.assign({},(tplOf(v)||{}).calc||{},v.calc||{}) });
   if((S.gv||1)<2){S.ventures.forEach(v=>{S.lv[v.id]=stage(v);v.pending=v.pending||{}});S.fresh=[]}
+  const ap=S.settings.apps||{};
+  if(ap.wg==="https://wurstgott.github.io/wertegeruest/") ap.wg="https://wurstgott.github.io/fernweh/wertegeruest/";
+  if(ap.gk==="https://wurstgott.github.io/glueckskompass/") ap.gk="https://wurstgott.github.io/fernweh/glueckskompass/";
   S.gv=GV;
 }
 function persist(){try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}}
