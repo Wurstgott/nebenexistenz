@@ -30,6 +30,7 @@ for ref in re.findall(r'auftrag:"([^"]+)"', data):
     if ref not in auf: sys.exit('Unbekannter Auftrag: ' + ref)
 
 if DIST != REPO: open(DIST + '/app.html', 'w', encoding='utf-8').write(page)
+if os.environ.get('ARTIFACT_OUT'): open(os.environ['ARTIFACT_OUT'], 'w', encoding='utf-8').write(page)
 
 # Fassung für GitHub Pages
 headpart, body = page.split('<div id="app">', 1)

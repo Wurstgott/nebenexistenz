@@ -38,6 +38,7 @@ const uid=()=>Math.random().toString(36).slice(2,9);
 const today=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
 const dayDiff=(a,b)=>Math.round((new Date(b+"T12:00")-new Date(a+"T12:00"))/864e5);
 const eur=(n,d=0)=>(isFinite(n)?n:0).toLocaleString("de-DE",{minimumFractionDigits:d,maximumFractionDigits:d})+" €";
+const dz=x=>x===""||x==null?"":String(x).replace(".",",");
 const n0=x=>{const v=parseFloat(String(x).replace(",","."));return isFinite(v)?v:0};
 const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
 const tplOf=v=>VORLAGEN.find(t=>t.id===v.tpl);
@@ -79,7 +80,7 @@ function calc(v){
   return{umsatz,ware,schwund,personal,prov,kosten,gewinn,laeufe,effL,jahrK,jahrU,jahrG,meine,proStd,start,amort,wochenStd,abg,ruecklage,kapital,saison};
 }
 function rahmen(){
-  const p=S.prof, mon=(p.beruf==="ang"||p.beruf==="beamt")?3:6, notgroschen=mon*n0(p.fix), frei=Math.max(0,n0(p.ruecklage)-notgroschen);
+  const p=S.prof, mon=(p.beruf==="ang"||p.beruf==="oed"||p.beruf==="beamt")?3:6, notgroschen=mon*n0(p.fix), frei=Math.max(0,n0(p.ruecklage)-notgroschen);
   const erstes=S.ventures.length<=1;
   const deckel=Math.round(frei*(erstes?0.10:0.15)/50)*50, gesamt=Math.round(frei*0.30/50)*50, monat=n0(p.netto)-n0(p.fix);
   const gebunden=aktive().reduce((s,v)=>s+calc(v).kapital,0);
@@ -88,14 +89,14 @@ function rahmen(){
 function jahresUmsatzAlle(){return aktive().reduce((s,v)=>s+calc(v).jahrU,0)}
 function jahresGewinnAlle(){return aktive().reduce((s,v)=>s+calc(v).jahrG,0)}
 function rechnungTxt(v){const c=v.calc,r=calc(v),t=tplOf(v);
-  return `Pro ${t.lauf}: Preis ${eur(n0(c.preis),2)}, Stückkosten ${eur(n0(c.kosten),2)}, ${n0(c.stueck)} Stück, Stand- oder Plattformkosten ${eur(n0(c.stand))}, Team ${n0(c.teamStd)} Std. zu ${eur(n0(c.lohn),2)}, sonstige Fixkosten ${eur(n0(c.fix))}. Ergebnis pro ${t.lauf}: Umsatz ${eur(r.umsatz)}, Gewinn ${eur(r.gewinn)}. ${r.laeufe} Läufe im Jahr, Startkosten ${eur(r.start)}.`}
+  return `Pro ${t.lauf}: Preis ${eur(n0(c.preis),2)}, Stückkosten ${eur(n0(c.kosten),2)}, ${n0(c.stueck)} Stück, Stand- oder Plattformkosten ${eur(n0(c.stand))}, Team ${n0(c.teamStd)} Std. zu ${eur(n0(c.lohn),2)}, sonstige Fixkosten ${eur(n0(c.fix))}. Ergebnis pro ${t.lauf}: Umsatz ${eur(r.umsatz)}, Gewinn ${eur(r.gewinn)}. ${r.laeufe} Läufe im Jahr, Startkosten ${eur(r.start)}`}
 
 /* ---------- Bauteile ---------- */
 function dutiesFor(v){
   const f=(tplOf(v)||{}).f||{};
   return PFLICHTEN.filter(d=>{try{return d.wenn(S.prof,f)}catch(e){return false}});
 }
-const PERSON=new Set(["ag","beamt","kv","fse","ku","euer","ihk","kasse","bg"]);
+const PERSON=new Set(["ag","oed","beamt","kv","fse","ku","euer","ihk","kasse","bg"]);
 function dutyDone(v,d){return PERSON.has(d.id)?!!S.pduties[d.id]:!!(v.duties||{})[d.id]}
 function traegt(v){
   if(v.runs.length<3) return false;
@@ -130,28 +131,34 @@ function detectProgress(){
 }
 
 /* ---------- Gleichgewicht ---------- */
-function weekMin(vid){const t=today();return S.time.filter(x=>dayDiff(x.d,t)<7&&(!vid||x.vid===vid)).reduce((s,x)=>s+n0(x.min),0)}
-function lifeShare(){if(!S.people.length) return null; const t=today(); return S.people.filter(p=>p.last&&dayDiff(p.last,t)<=14).length/S.people.length}
+function weekMin(vid){const t=today();
+  const tm=S.time.filter(x=>dayDiff(x.d,t)<7&&(!vid||x.vid===vid)).reduce((s,x)=>s+n0(x.min),0);
+  const rn=S.ventures.filter(v=>!vid||v.id===vid).reduce((s,v)=>s+v.runs.filter(r=>dayDiff(r.d,t)<7&&dayDiff(r.d,t)>=0).reduce((a,r)=>a+n0(r.meineStd)*60,0),0);
+  return tm+rn}
+const seenRecently=p=>{const t=today();return (p.last&&dayDiff(p.last,t)<=14)||(p.added&&dayDiff(p.added,t)<14)};
+function lifeShare(){if(!S.people.length) return null; return S.people.filter(seenRecently).length/S.people.length}
 function balance(){
   const budget=Math.max(30,n0(S.prof.stunden)*60), load=weekMin()/budget, ls=lifeShare();
   const solo=aktive().filter(v=>v.solo).length;
   let score=clamp((load-0.8)*0.9,-0.4,1.1)+(ls==null?0:(0.55-ls)*0.9)+solo*0.08;
   score=clamp(score,-1,1);
-  const state=score>0.25?"zieht":score<-0.2?"leben":"gleich";
+  const state=!S.ventures.length&&!S.people.length?"leer":score>0.25?"zieht":score<-0.2?"leben":"gleich";
   return{score,load,ls,budget,state};
 }
-const isSteuertag=()=>S.prof.tage.includes(new Date().getDay());
+const isVorhabentag=()=>S.prof.tage.includes(new Date().getDay())||S.firstDay===today();
 
 /* ---------- Nächster Schritt ---------- */
 function stalePerson(){
-  if(!S.people.length) return null;
-  return [...S.people].sort((a,b)=>(a.last||"0000")<(b.last||"0000")?-1:1)[0];
+  const c=S.people.filter(p=>p.last!==today());
+  if(!c.length) return null;
+  return c.sort((a,b)=>(a.last||"0000")<(b.last||"0000")?-1:1)[0];
 }
 function lifeStep(reason){
+  if(!S.people.length) return{tone:"var(--leben)",ey:"Leben",t:"Trag die Menschen ein, die dir nah sind",x:reason+" Die App achtet dann darauf, dass sie nicht aus dem Blick geraten.",btns:[{l:"Menschen eintragen",a:"sheet",id:"people",c:"leben"}]};
   const p=stalePerson();
-  if(!p) return{tone:"var(--leben)",ey:"Leben",t:"Trag die Menschen ein, die dir nah sind",x:reason+" Die App achtet dann darauf, dass sie nicht aus dem Blick geraten.",btns:[{l:"Menschen eintragen",a:"sheet",id:"people",c:"leben"}]};
+  if(!p||S.lifeLater===today()) return{tone:"var(--leben)",ey:"Leben",t:"Für heute ist nichts mehr dran",x:"Die Vorhaben laufen auch, wenn du nicht hinschaust. Genieß den Rest des Tages.",btns:[]};
   const imp=LEBEN_IMPULSE[(new Date().getDate()+p.name.length)%LEBEN_IMPULSE.length].replace("{p}",p.name);
-  return{tone:"var(--leben)",ey:"Leben",t:imp,x:reason+" Zuletzt eingetragen: "+agoTxt(p.last)+".",btns:[{l:"Erledigt",a:"seen",id:p.id,c:"leben"},{l:"Später",a:"later",c:"ghost"}]};
+  return{tone:"var(--leben)",ey:"Leben",t:imp,x:reason+" Zuletzt eingetragen: "+agoTxt(p.last)+".",btns:[{l:"Erledigt",a:"seen",id:p.id,c:"leben"},{l:"Heute nicht",a:"later",c:"ghost"}]};
 }
 function ventureStep(v){
   const n=stage(v), t=tplOf(v), bt=BAUTEILE[n];
@@ -175,14 +182,14 @@ function isPending(v,d){return !!((v.pending||{})[d.id])}
 function nextStep(){
   const p=S.prof;
   if(!p.land||!p.beruf) return{tone:"var(--neben)",ey:"Anfang",t:"Deinen Rahmen festlegen",x:"Bundesland, Hauptberuf, Geld und Zeit. Daraus leitet die App ab, welche Schritte nötig sind und wie viel du einsetzen kannst.",btns:[{l:"Rahmen festlegen",a:"sheet",id:"profil"}]};
-  if(!isSteuertag()&&S.override!==today()){
-    const st=lifeStep("Heute ist kein Steuertag, also ist Leben dran.");
+  if(new Date().getDay()===0&&!(S.weeks.length&&dayDiff(S.weeks[S.weeks.length-1].d,today())<6))
+    return{tone:"var(--sinn)",ey:"Wochenblick",t:"Wie war die Woche?",x:"Drei kurze Fragen: mit wem du Zeit hattest, ob die Vorhaben Kraft gegeben oder genommen haben, und was du weglässt.",btns:[{l:"Wochenblick",a:"sheet",id:"week",c:"sinn"}]};
+  if(!isVorhabentag()&&S.override!==today()){
+    const st=lifeStep("Heute ist kein Vorhabentag, also ist Leben dran.");
     st.btns.push({l:"Doch kurz etwas erledigen",a:"override",c:"ghost"}); return st;
   }
   const b=balance();
   if(b.state==="zieht"&&S.override!==today()) { const st=lifeStep("Die Vorhaben ziehen gerade stärker als dein Rahmen vorsieht."); st.btns.push({l:"Trotzdem weiter",a:"override",c:"ghost"}); return st }
-  if(new Date().getDay()===0&&!(S.weeks.length&&dayDiff(S.weeks[S.weeks.length-1].d,today())<6))
-    return{tone:"var(--sinn)",ey:"Wochenblick",t:"Wie war die Woche?",x:"Drei kurze Fragen: mit wem du Zeit hattest, ob die Vorhaben Kraft gegeben oder genommen haben, und was du weglässt.",btns:[{l:"Wochenblick",a:"sheet",id:"week",c:"sinn"}]};
   const act=aktive();
   if(!act.length) return{tone:"var(--neben)",ey:"Erstes Vorhaben",t:"Ein erstes Vorhaben aufhängen",x:"Wähl eine von "+ZAHLW(VORLAGEN.length)+" Vorlagen. Jede bringt ihre Pflichtschritte, eine Rechnung und passende Aufträge an Claude mit.",btns:[{l:"Vorlagen ansehen",a:"sheet",id:"neu"}]};
   const sorted=[...act].sort((a,b)=>stage(b)-stage(a)||(a.created<b.created?-1:1));
@@ -198,20 +205,19 @@ function fill(s,v,extra){
   const r=v?calc(v):null;
   const pr=v?preisSpanne(v):null;
   const map={land:landN(),ort:S.prof.ort||"meiner Region",frist:RECHT.fsEFrist,kuV:RECHT.kuVorjahr.toLocaleString("de-DE"),kuL:RECHT.kuLaufend.toLocaleString("de-DE"),
-    kurz:RECHT.kurzTage,mini:RECHT.minijob,abg:RECHT.minijobAbgabe,ml:RECHT.mindestlohn.toLocaleString("de-DE",{minimumFractionDigits:2}),
+    kurzTage:RECHT.kurzTage,desc:v&&t?(v.desc||t.kurz):"",mini:RECHT.minijob,abg:RECHT.minijobAbgabe,ml:RECHT.mindestlohn.toLocaleString("de-DE",{minimumFractionDigits:2}),
     haerte:RECHT.haerte,gew:RECHT.gewStFrei.toLocaleString("de-DE"),ihk:RECHT.ihkFrei.toLocaleString("de-DE"),stand:RECHT.stand,
-    beruf:({ang:"angestellt",beamt:"verbeamtet",stud:"im Studium",selbst:"schon selbstständig",ohne:"nicht angestellt"})[S.prof.beruf]||"berufstätig",name:v?v.name:"",vorlage:t?t.n:"",taetig:t?t.taetig:"",std:S.prof.stunden,
+    beruf:({ang:"angestellt",oed:"im öffentlichen Dienst angestellt",beamt:"verbeamtet",stud:"im Studium",selbst:"schon selbstständig",ohne:"nicht angestellt"})[S.prof.beruf]||"berufstätig",name:v?v.name:"",vorlage:t?t.n:"",taetig:t?t.taetig:"",std:v?Math.max(1,Math.ceil(calc(v).wochenStd)):S.prof.stunden,
     form:tm&&tm.form==="mini"?"geringfügige Beschäftigung (Minijob)":"kurzfristige Beschäftigung",
     rechnung:v?rechnungTxt(v):"",laeufe:v&&v.runs.length?v.runs.map(x=>dateDE(x.d)+": Umsatz "+eur(n0(x.umsatz))+", Gewinn "+eur(n0(x.umsatz)-n0(x.kosten))).join("; "):"noch keine",
     preis:pr?eur(pr[0])+" bis "+eur(pr[1]):"",lm:f.lebensmittel?", Lebensmittelüberwachung, Gesundheitsamt":"",
     team:f.team?", Information des Teams nach § 613a BGB":"",
     stelle:"die zuständige Stelle",thema:"die Anmeldung meines Vorhabens",...(extra||{})};
-  s=s.replace("{kurz}",v&&t?(v.desc||t.kurz):"{kurz}");
   return s.replace(/\{(\w+)\}/g,(m,k)=>map[k]!=null?map[k]:m);
 }
 function promptFor(v,task,dutyId){
   const a=AUFTRAEGE.find(x=>x.id===task), d=dutyId?PFLICHTEN.find(x=>x.id===dutyId):null;
-  const extra=d?{stelle:d.wer,thema:d.t+". Hintergrund: "+fill(d.x,v)}:null;
+  const extra=d?{stelle:d.wer,thema:d.t+". Hintergrund: "+fill(d.x,v).replace(/\.\s*$/,"")}:null;
   return fill(a.p,v,extra)+"\n\nAntworte auf Deutsch in einfachen Sätzen. Nenne Quellen mit Link und sag klar, was ich selbst prüfen oder mit einer Fachperson klären muss.";
 }
 function preisSpanne(v){
@@ -247,7 +253,7 @@ function mobileSVG(){
   s+=`<path d="M56 60 Q177 44 298 60" fill="none" stroke="${W}" stroke-width="1.7"/><circle cx="177" cy="52" r="3" fill="${W}"/>`;
   /* Leben-Seite */
   s+=`<g class="mob-hit" data-a="tab" data-id="leben" tabindex="0" role="button" aria-label="Lebensseite öffnen">`;
-  s+=`<line x1="56" y1="60" x2="56" y2="118" stroke="${W}" stroke-width="1.5"/>`;
+  s+=`<circle cx="56" cy="146" r="40" fill="transparent"/><line x1="56" y1="60" x2="56" y2="118" stroke="${W}" stroke-width="1.5"/>`;
   s+=`<path class="plate" d="${shapePath("kreis",56,146,28)}" fill="var(--leben)"/>`;
   s+=`<text x="56" y="150" text-anchor="middle" font-family="var(--f-mono)" font-size="11" fill="var(--on)" letter-spacing=".06em">LEBEN</text>`;
   const ppl=S.people.slice(0,6);
@@ -263,17 +269,17 @@ function mobileSVG(){
   s+=`</g>`;
   /* Vorhaben-Seite */
   s+=`<line x1="298" y1="60" x2="298" y2="88" stroke="${W}" stroke-width="1.5"/><path d="M214 92 Q280 84 340 92" fill="none" stroke="${W}" stroke-width="1.6"/><circle cx="298" cy="88" r="2.5" fill="${W}"/>`;
-  s+=`<g class="mob-hit" data-a="tab" data-id="vorhaben" tabindex="0" role="button" aria-label="Rücklage, zu den Vorhaben"><line x1="216" y1="92" x2="216" y2="112" stroke="${W}" stroke-width="1.3"/><path class="plate" d="${shapePath("kreis",216,126,14)}" fill="var(--geld)"/></g>`;
+  s+=`<g class="mob-hit" data-a="tab" data-id="vorhaben" tabindex="0" role="button" aria-label="Geld, zu den Vorhaben"><circle cx="216" cy="122" r="22" fill="transparent"/><line x1="216" y1="92" x2="216" y2="112" stroke="${W}" stroke-width="1.3"/><path class="plate" d="${shapePath("kreis",216,126,14)}" fill="var(--geld)"/></g>`;
   const slots=[[250,58],[286,96],[324,70]];
   for(let i=0;i<MAX_AKTIV;i++){
     const [x,len]=slots[i], v=act[i];
     if(!v){
-      if(i===act.length) s+=`<g class="mob-hit" data-a="sheet" data-id="neu" tabindex="0" role="button" aria-label="Neues Vorhaben aufhängen"><line x1="${x}" y1="92" x2="${x}" y2="${92+len-18}" stroke="${W}" stroke-width="1.2" stroke-dasharray="2 3"/><path d="${shapePath("kreis",x,92+len,16)}" fill="none" stroke="var(--faint)" stroke-width="1.4" stroke-dasharray="4 3"/><text x="${x}" y="${92+len+4}" text-anchor="middle" font-family="var(--f-ui)" font-size="16" fill="var(--faint)">+</text></g>`;
+      if(i===act.length) s+=`<g class="mob-hit" data-a="sheet" data-id="neu" tabindex="0" role="button" aria-label="Neues Vorhaben aufhängen"><circle cx="${x}" cy="${92+len}" r="24" fill="transparent"/><line x1="${x}" y1="92" x2="${x}" y2="${92+len-18}" stroke="${W}" stroke-width="1.2" stroke-dasharray="2 3"/><path d="${shapePath("kreis",x,92+len,16)}" fill="none" stroke="var(--faint)" stroke-width="1.4" stroke-dasharray="4 3"/><text x="${x}" y="${92+len+4}" text-anchor="middle" font-family="var(--f-ui)" font-size="16" fill="var(--faint)">+</text></g>`;
       continue;
     }
     const t=tplOf(v), n=stage(v), r=9+n*2.3, ybase=92+len+n*4; maxY=Math.max(maxY,ybase+r*1.3);
     s+=`<g class="mob-hit" data-a="venture" data-id="${v.id}" tabindex="0" role="button" aria-label="${esc(v.name)}, ${n} von 7 Bauteilen">`;
-    s+=`<line x1="${x}" y1="92" x2="${x}" y2="${(ybase-r).toFixed(1)}" stroke="${W}" stroke-width="1.3"/>`;
+    s+=`<rect x="${x-18}" y="96" width="36" height="${(ybase-96+r+12).toFixed(1)}" fill="transparent"/><line x1="${x}" y1="92" x2="${x}" y2="${(ybase-r).toFixed(1)}" stroke="${W}" stroke-width="1.3"/>`;
     for(let k=0;k<7;k++){
       const yy=100+k*((ybase-r-108)/6);
       const on=k<n, nx=k===n, cls=fr.has(v.id+":"+k)?" class=\"plate-new\" style=\"transform-origin:"+x+"px "+yy.toFixed(1)+"px\"":"";
@@ -295,10 +301,11 @@ function mobileSVG(){
   return s.replace("__H__",H());
 }
 function balanceLine(){
-  const b=balance(), h=(weekMin()/60), ls=lifeShare();
-  const st={zieht:"Die Vorhaben ziehen",leben:"Das Leben wiegt schwerer",gleich:"Im Gleichgewicht"}[b.state];
-  const ppl=S.people.length?` · ${S.people.filter(p=>p.last&&dayDiff(p.last,today())<=14).length} von ${S.people.length} Menschen gesehen`:"";
-  return`<p class="balance"><b>${st}</b> · ${h.toLocaleString("de-DE",{maximumFractionDigits:1})} von ${S.prof.stunden} Std. Steuerzeit${ppl}</p>`;
+  const b=balance(), h=(weekMin()/60);
+  const st={zieht:"Die Vorhaben ziehen",leben:"Das Leben wiegt schwerer",gleich:"Im Gleichgewicht",leer:"Noch hängt nur das Leben"}[b.state];
+  const ppl=S.people.length?` · ${S.people.filter(seenRecently).length} von ${S.people.length} Menschen gesehen`:"";
+  return`<p class="balance"><b>${st}</b> · ${h.toLocaleString("de-DE",{maximumFractionDigits:1})} von ${S.prof.stunden} Std. Vorhabenzeit${ppl}</p>
+  <p class="legend" aria-hidden="true"><span><i style="background:var(--leben)"></i>Leben</span><span><i style="background:var(--neben)"></i>Vorhaben</span><span><i style="background:var(--geld)"></i>Geld</span></p>`;
 }
 
 /* ---------- Ansichten ---------- */
@@ -319,9 +326,10 @@ function btnHTML(b){
 }
 function hintFor(){
   const t=today();
-  if(S.hint.d===t) return S.hint.id?HINTS.find(h=>h.id===S.hint.id):null;
+  if(S.hint.d===t&&S.hint.id) return S.hintsOff[S.hint.id]?null:HINTS.find(h=>h.id===S.hint.id);
+  if(S.hint.d===t&&S.hint.done) return null;
   const h=HINTS.find(h=>!S.hintsOff[h.id]&&h.when());
-  S.hint={d:t,id:h?h.id:""}; persist(); return h;
+  if(h){S.hint={d:t,id:h.id};persist()} return h;
 }
 const HINTS=[
   {id:"oft",when:()=>S.opens.n>=4,t:"Du hast heute schon oft hineingesehen.",x:"Die Vorhaben laufen auch, wenn du nicht schaust. Die App meldet sich nicht von selbst, und das ist Absicht."},
@@ -342,7 +350,7 @@ function viewHome(){
     act.forEach(v=>{const n=stage(v);s+=`<button class="li" data-a="venture" data-id="${v.id}"><span class="grow"><span class="t">${esc(v.name)}</span><span class="s">${BAUTEILE[n-1].n} · ${n} von 7 Bauteilen</span><span class="parts" aria-hidden="true">${BAUTEILE.map((b,i)=>`<i class="part ${i<n?"on":i===n?"nx":""}"></i>`).join("")}</span></span><span class="chev"></span></button>`});
     s+=`</div></div>`;
   }
-  s+=`<div class="sec"><div class="chips"><button class="btn ghost small" data-a="sheet" data-id="time">Steuerzeit eintragen</button>${isSteuertag()?`<span class="pill info">Heute ist Steuertag</span>`:`<span class="pill">Heute ist ${WTL[new Date().getDay()]}, kein Steuertag</span>`}</div></div>`;
+  s+=`<div class="sec"><div class="chips"><button class="btn ghost small" data-a="sheet" data-id="time">Vorhabenzeit eintragen</button>${isVorhabentag()?`<span class="pill info">Heute ist Vorhabentag</span>`:`<span class="pill">Heute ist ${WTL[new Date().getDay()]}, kein Vorhabentag</span>`}</div></div>`;
   s+=foot();
   return s;
 }
@@ -379,6 +387,7 @@ function wirkung(){
   return{ppl:ppl.size,lohn,std,partner,weiter,bio};
 }
 function wirkungHTML(){const w=wirkung();
+  if(!w.ppl&&!w.partner&&!w.lohn&&!w.weiter) return`<div class="sec"><div class="wirehead"><span class="eyebrow">Was es bewirkt</span></div><p class="muted small">Das Ziel ist nicht nur Geld für dich, sondern Arbeit für andere, Nachhaltigkeit und Sinn. Sobald jemand für eines deiner Vorhaben arbeitet oder verkauft, siehst du hier, was es bewirkt.</p></div>`;
   return`<div class="sec"><div class="wirehead"><span class="eyebrow">Was es bewirkt</span></div><p class="muted small">Das Ziel ist nicht nur Geld für dich, sondern Arbeit für andere, Nachhaltigkeit und Sinn. Deshalb steht das hier zuerst.</p><div class="figs">
   <div class="fig"><span class="k">Menschen mit Arbeit</span><span class="v num">${w.ppl}</span><span class="e">${w.partner?w.partner+" Partner verkaufen mit":"im Team deiner Vorhaben"}</span></div>
   <div class="fig"><span class="k">Löhne gezahlt</span><span class="v num">${eur(w.lohn)}</span><span class="e">${w.std.toLocaleString("de-DE")} Arbeitsstunden laut Läufen</span></div>
@@ -404,7 +413,9 @@ function viewAmt(){
       const k=PERSON.has(d.id)?d.id:v.id+d.id; if(seen.has(k)) return; seen.add(k);
       rows+=dutyRow(v,d,!PERSON.has(d.id)&&act.length>1);
     }));
-    if(rows) s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">${PFLICHT_PHASEN[w]}</span></div><div>${rows}</div></div>`;
+    if(!rows) return;
+    const open=act.some(v=>phaseOpen(w,v,stage(v)));
+    s+=open?`<div class="sec"><div class="wirehead"><span class="eyebrow">${PFLICHT_PHASEN[w]}</span></div><div>${rows}</div></div>`:`<div class="sec">${phaseLater(w,"pha-"+w,(rows.match(/class="duty"/g)||[]).length,rows)}</div>`;
   });
   s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Formulare vorbereitet</span></div><div class="list">${act.filter(v=>!tplOf(v).f.kurs).map(v=>`<button class="li" data-a="sheet" data-id="form" data-form="gewa" data-vid="${v.id}"><span class="grow"><span class="t">Gewerbeanmeldung</span><span class="s">${esc(v.name)}</span></span><span class="chev"></span></button>`).join("")}<button class="li" data-a="sheet" data-id="form" data-form="fse" data-vid="${act[0].id}"><span class="grow"><span class="t">Fragebogen zur steuerlichen Erfassung</span><span class="s">für alle Vorhaben zusammen</span></span><span class="chev"></span></button></div></div>`;
   return s+foot();
@@ -415,17 +426,19 @@ function dutyRow(v,d,showName){
   <details data-key="${key}" ${OPEN.has(key)?"open":""}><summary>Warum und wie</summary><p>${esc(fill(d.x,v))}</p><p style="margin-top:6px"><strong>So geht’s:</strong> ${esc(fill(d.wie,v))}</p><div class="acts">${d.link?`<a class="linkbtn" href="${d.link}" target="_blank" rel="noopener">${esc(d.link.replace(/^https:\/\//,""))}</a>`:""}${d.auftrag?`<button class="btn small ghost" data-a="auftrag" data-id="${v.id}" data-task="${d.auftrag}">Claude beauftragen</button>`:""}${!d.auftrag&&!NOASK.has(d.wer)?`<button class="btn small ghost" data-a="auftrag" data-id="${v.id}" data-task="a_anfrage" data-duty="${d.id}">Anfrage vorbereiten</button>`:""}${d.form?`<button class="btn small ghost" data-a="sheet" data-id="form" data-form="${d.form}" data-vid="${v.id}">Formularwerte</button>`:""}</div>${!on&&d.w==="vor"&&!PERSON.has(d.id)?`<div class="acts"><button class="linkbtn" data-a="pend" data-id="${v.id}" data-duty="${d.id}">${isPending(v,d)?"Doch noch nicht beantragt":"Beantragt, warte auf Antwort"}</button></div>`:""}${on?`<p class="mono" style="margin-top:6px">erledigt am ${dateDE(PERSON.has(d.id)?S.pduties[d.id]:v.duties[d.id])}</p>`:""}</details></div>`;
 }
 const OPEN=new Set();
+function phaseOpen(w,v,n){if(w==="vor")return true;if(w==="exit")return n>=7||!!v.exit;return n>=4}
+function phaseLater(w,key,cnt,rows){return`<details class="phase" data-key="${key}" ${OPEN.has(key)?"open":""}><summary>Später: ${PFLICHT_PHASEN[w]} <span class="pill">${cnt}</span></summary><div>${rows}</div></details>`}
 const NOASK=new Set(["Eigene Seite","Team","Käuferin oder Käufer"]);
 
 function viewLeben(){
   const b=balance(), wm=weekMin();
   let s=`<h2 style="margin-top:12px">Leben</h2><p class="muted small">Die linke Seite des Mobiles. Sie zieht mit, und sie soll schwerer wiegen als die Vorhaben.</p>`;
-  s+=`<div class="sec"><div class="figs"><button class="fig" data-a="explain" data-id="zeit"><span class="k">Steuerzeit diese Woche</span><span class="v num">${(wm/60).toLocaleString("de-DE",{maximumFractionDigits:1})} / ${S.prof.stunden} Std.</span><span class="bar" style="--c:${b.load>1?"var(--leben)":"var(--neben)"}"><i style="width:${clamp(b.load*100,0,100)}%"></i></span></button>
+  s+=`<div class="sec"><div class="figs"><button class="fig" data-a="explain" data-id="zeit"><span class="k">Vorhabenzeit diese Woche</span><span class="v num">${(wm/60).toLocaleString("de-DE",{maximumFractionDigits:1})} / ${S.prof.stunden} Std.</span><span class="bar" style="--c:${b.load>1?"var(--leben)":"var(--neben)"}"><i style="width:${clamp(b.load*100,0,100)}%"></i></span></button>
   <button class="fig" data-a="explain" data-id="menschen"><span class="k">Menschen gesehen</span><span class="v num">${S.people.length?S.people.filter(p=>p.last&&dayDiff(p.last,today())<=14).length+" / "+S.people.length:"–"}</span><span class="e">in den letzten 14 Tagen</span></button></div></div>`;
   s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Nahe Menschen</span></div><p class="muted small">Tipp auf einen Namen, wenn du heute mit dem Menschen Zeit hattest.</p><div class="people">${S.people.map(p=>{const st=!p.last||dayDiff(p.last,today())>14;return`<button class="person ${st?"stale":""}" data-a="seen" data-id="${p.id}" aria-label="${esc(p.name)}, zuletzt ${agoTxt(p.last)}"><span class="av">${esc(p.name.slice(0,1).toUpperCase())}</span>${esc(p.name)} <span class="ago">${agoTxt(p.last)}</span></button>`}).join("")}<button class="chip" data-a="sheet" data-id="people">${S.people.length?"Bearbeiten":"Menschen eintragen"}</button></div></div>`;
-  s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Deine Steuertage</span></div><p class="muted small">Nur an diesen Tagen schlägt die App Schritte für die Vorhaben vor. An allen anderen Tagen ist Leben dran.</p><div class="chips">${[1,2,3,4,5,6,0].map(d=>`<button class="chip" data-a="tag" data-id="${d}" data-key="tag${d}" aria-pressed="${S.prof.tage.includes(d)}">${WT[d]}</button>`).join("")}</div>
+  s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Deine Vorhabentage</span></div><p class="muted small">Nur an diesen Tagen schlägt die App Schritte für die Vorhaben vor. An allen anderen Tagen ist Leben dran.</p><div class="chips">${[1,2,3,4,5,6,0].map(d=>`<button class="chip" data-a="tag" data-id="${d}" data-key="tag${d}" aria-pressed="${S.prof.tage.includes(d)}">${WT[d]}</button>`).join("")}</div>
   <div class="field"><span class="lab">Stunden pro Woche für alle Vorhaben</span><div class="chips">${[1,2,3,4,6,8].map(h=>`<button class="chip" data-a="std" data-id="${h}" data-key="std${h}" aria-pressed="${S.prof.stunden==h}">${h}</button>`).join("")}</div></div></div>`;
-  s+=`<div class="sec"><div class="chips"><button class="btn sinn" data-a="sheet" data-id="week">Wochenblick</button><button class="btn ghost" data-a="sheet" data-id="time">Steuerzeit eintragen</button></div>${S.weeks.length?`<p class="muted small">Letzter Wochenblick ${agoTxt(S.weeks[S.weeks.length-1].d)}: ${esc({gab:"Die Vorhaben haben Kraft gegeben.",neutral:"Weder noch.",nahm:"Die Vorhaben haben Kraft genommen."}[S.weeks[S.weeks.length-1].kraft]||"")}${S.weeks[S.weeks.length-1].weg?" Weglassen: „"+esc(S.weeks[S.weeks.length-1].weg)+"“":""}</p>`:""}</div>`;
+  s+=`<div class="sec"><div class="chips"><button class="btn sinn" data-a="sheet" data-id="week">Wochenblick</button><button class="btn ghost" data-a="sheet" data-id="time">Vorhabenzeit eintragen</button></div>${S.weeks.length?`<p class="muted small">Letzter Wochenblick ${agoTxt(S.weeks[S.weeks.length-1].d)}: ${esc({gab:"Die Vorhaben haben Kraft gegeben.",neutral:"Weder noch.",nahm:"Die Vorhaben haben Kraft genommen."}[S.weeks[S.weeks.length-1].kraft]||"")}${S.weeks[S.weeks.length-1].weg?" Weglassen: „"+esc(S.weeks[S.weeks.length-1].weg)+"“":""}</p>`:""}</div>`;
   s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Deine Werte</span></div>${S.werte.length?`<div class="chips">${S.werte.map(w=>`<span class="pill ok">${esc(w)}</span>`).join("")}</div>`:`<p class="muted small">Noch keine. Trag bis zu fünf Werte ein, zum Beispiel aus deinem Wertegerüst.</p>`}<div><button class="btn small ghost" data-a="sheet" data-id="werte">Werte eintragen</button></div></div>`;
   s+=appLinks();
   s+=wissenHTML("leben","Warum die Lebensseite schwerer wiegt");
@@ -436,23 +449,29 @@ function appLinks(){
   return`<div class="sec"><div class="wirehead"><span class="eyebrow">Deine anderen Apps</span></div><div class="list">
   <a class="li" href="${esc(a.wg)}" target="_blank" rel="noopener"><span class="dot" style="--c:var(--neben)"></span><span class="grow"><span class="t">Wertegerüst</span><span class="s">Werte finden und verankern. Die Werte prüfen hier jedes Vorhaben.</span></span><span class="chev"></span></a>
   <a class="li" href="${esc(a.bt)}" target="_blank" rel="noopener"><span class="dot" style="--c:var(--sinn)"></span><span class="grow"><span class="t">Biotop</span><span class="s">Nachhaltiger leben. Hier fließt es in den Nachhaltigkeitsblick jedes Vorhabens.</span></span><span class="chev"></span></a>
-  <a class="li" href="${esc(a.gk)}" target="_blank" rel="noopener"><span class="dot" style="--c:var(--geld)"></span><span class="grow"><span class="t">Glückskompass</span><span class="s">Glücksforschung zum Ausprobieren. Hier fragt die App nach jeder Steuerzeit, ob sie dir gutgetan hat.</span></span><span class="chev"></span></a></div></div>`;
+  <a class="li" href="${esc(a.gk)}" target="_blank" rel="noopener"><span class="dot" style="--c:var(--geld)"></span><span class="grow"><span class="t">Glückskompass</span><span class="s">Glücksforschung zum Ausprobieren. Hier fragt die App nach jeder Vorhabenzeit, ob sie dir gutgetan hat.</span></span><span class="chev"></span></a></div></div>`;
 }
 
 /* ---------- Bögen ---------- */
 let SH=null; // {id, ...opts}
-function openSheet(id,o={}){
-  const wasOpen=!!SH; SH={id,...o};
-  if(!wasOpen){ lastFocus=document.activeElement; try{history.pushState({sheet:1},"")}catch(e){} }
+let STACK=[], backPending=false, deferred=null;
+function openSheet(id,o={},replace){
+  if(backPending){deferred=()=>openSheet(id,o,replace);return}
+  const wasOpen=!!SH;
+  if(wasOpen&&!replace&&id!=="moment"){SH._sc=$("#sheet .sbody").scrollTop;STACK.push(SH)}
+  SH={id,...o};
+  if(!wasOpen){ STACK=[]; lastFocus=document.activeElement; try{history.pushState({sheet:1},"")}catch(e){} }
   renderSheet(true);
 }
+function backSheet(){ if(!STACK.length){closeSheet();return} SH=STACK.pop(); renderSheet(); const b=$("#sheet .sbody"); if(b) b.scrollTop=SH._sc||0 }
+function backTo(id,o){ if(STACK.length&&STACK[STACK.length-1].id===id){SH=STACK.pop();Object.assign(SH,o);renderSheet()} else openSheet(id,o,true) }
 let lastFocus=null;
 function closeSheet(fromPop){
-  if(!SH) return; SH=null;
+  if(!SH) return; SH=null; STACK=[];
   const sh=$("#sheet"), sc=$("#scrim"); sh.classList.remove("on"); sc.classList.remove("on");
   setTimeout(()=>{if(!SH){sh.hidden=true;sc.hidden=true;sh.querySelector(".sbody").innerHTML=""}},330);
   document.documentElement.style.overflow="";
-  if(!fromPop){try{if(history.state&&history.state.sheet) history.back()}catch(e){}}
+  if(!fromPop){try{if(history.state&&history.state.sheet){backPending=true;history.back();setTimeout(()=>{if(backPending){backPending=false;const f=deferred;deferred=null;if(f)f()}},400)}}catch(e){}}
   render(); if(lastFocus&&lastFocus.isConnected) lastFocus.focus();
   setTimeout(showMoment,900);
 }
@@ -467,15 +486,15 @@ function renderSheet(first){
   else body.scrollTop=st;
   afterRender();
 }
-const head=(ey,t,c)=>`<div class="shead"><div class="grow"><p class="eyebrow"><span class="knot" style="--c:${c||"var(--neben)"}"></span>${esc(ey)}</p><h2>${esc(t)}</h2></div><button class="closebtn" data-a="close">Schließen</button></div>`;
+const head=(ey,t,c)=>`<div class="shead"><div class="grow"><p class="eyebrow"><span class="knot" style="--c:${c||"var(--neben)"}"></span>${esc(ey)}</p><h2>${esc(t)}</h2></div><button class="closebtn" data-a="close">${STACK.length?"Zurück":"Schließen"}</button></div>`;
 
 const SHEETS={
   welcome(){return`${head("Willkommen","Eine Nebenexistenz, die neben dem Leben bleibt")}
     <p>Die App hilft dir, nebenher kleine, legale Gewerbe aufzubauen, die andere für dich führen. Du steuerst, die Arbeit verteilt sich.</p>
     <div class="timeline"><div class="tl on"><span class="t">Rahmen festlegen</span><span class="muted small">Bundesland, Hauptberuf, Geld und Zeit. Daraus folgen Pflichten und wie viel Geld du einsetzen kannst.</span></div>
-    <div class="tl on"><span class="t">Vorhaben aufhängen</span><span class="muted small">Jedes Vorhaben wächst in sieben Bauteilen: wählen, prüfen, anmelden, ausgestalten, übertragen, erproben, tragen. Anmeldungen und Formulare sind vorbereitet, Recherchen und Texte übernimmt Claude per Knopfdruck.</span></div>
+    <div class="tl on"><span class="t">Vorhaben aufhängen</span><span class="muted small">Jedes Vorhaben wächst in sieben Bauteilen: wählen, prüfen, ausgestalten, anmelden, erproben, übertragen, tragen. Anmeldungen und Formulare sind vorbereitet, Recherchen und Texte übernimmt Claude per Knopfdruck.</span></div>
     <div class="tl on"><span class="t">Weitergeben</span><span class="muted small">Wenn ein Vorhaben sich trägt, schlägt die App vor, es zu verkaufen. Es bleibt im Bild sichtbar.</span></div></div>
-    <div class="note leben"><span>Die linke Seite des Mobiles ist dein Leben. Wenn die Vorhaben zu schwer werden, neigt es sich. An Tagen ohne Steuerzeit schlägt die App nur Schritte für das Leben vor.</span></div>
+    <div class="note leben"><span>Die linke Seite des Mobiles ist dein Leben. Wenn die Vorhaben zu schwer werden, neigt es sich. An Tagen ohne Vorhabenzeit schlägt die App nur Schritte für das Leben vor.</span></div>
     <div class="stack"><button class="btn wide" data-a="welcomeGo">Rahmen festlegen</button><button class="btn ghost wide" data-a="demoOn">Mit Beispiel umsehen</button></div>
     <p class="muted small">Ohne Konto, ohne Server, ohne Benachrichtigungen. Alles bleibt auf deinem Gerät.</p>`},
 
@@ -484,9 +503,11 @@ const SHEETS={
     <div class="field"><label for="f-land">Bundesland, in dem du steuerlich gemeldet bist</label><select id="f-land" data-bind="prof.land"><option value="">Bitte wählen</option>${LAENDER.map(l=>`<option value="${l.id}" ${p.land===l.id?"selected":""}>${l.n}</option>`).join("")}</select></div>
     <div class="field"><label for="f-ort">Ort oder Region</label><input id="f-ort" type="text" data-bind="prof.ort" value="${esc(p.ort)}" placeholder="zum Beispiel Leipzig"><span class="hint">Nur für die Aufträge an Claude, damit Recherchen in deiner Gegend suchen. Keine Adresse nötig.</span></div>
     <div class="field"><span class="lab">Hauptberuf</span><div class="chips">${BERUFE.map(b=>`<button class="chip" data-a="beruf" data-id="${b.id}" data-key="ber${b.id}" aria-pressed="${p.beruf===b.id}">${b.n}</button>`).join("")}</div></div>
-    <div class="grid2"><div class="field"><label for="f-netto">Netto im Monat</label><div class="suffix"><input id="f-netto" type="number" inputmode="decimal" data-bind="prof.netto" value="${p.netto||""}"><span>€</span></div></div>
-    <div class="field"><label for="f-fix">Feste Ausgaben</label><div class="suffix"><input id="f-fix" type="number" inputmode="decimal" data-bind="prof.fix" value="${p.fix||""}"><span>€</span></div></div></div>
-    <div class="field"><label for="f-rl">Rücklagen gesamt</label><div class="suffix"><input id="f-rl" type="number" inputmode="decimal" data-bind="prof.ruecklage" value="${p.ruecklage||""}"><span>€</span></div></div>
+    <div class="grid2"><div class="field"><label for="f-netto">Netto im Monat</label><div class="suffix"><input id="f-netto" type="text" inputmode="decimal" data-num="1" data-bind="prof.netto" value="${p.netto||""}"><span>€</span></div></div>
+    <div class="field"><label for="f-fix">Feste Ausgaben</label><div class="suffix"><input id="f-fix" type="text" inputmode="decimal" data-num="1" data-bind="prof.fix" value="${p.fix||""}"><span>€</span></div></div></div>
+    <div class="field"><label for="f-rl">Rücklagen gesamt</label><div class="suffix"><input id="f-rl" type="text" inputmode="decimal" data-num="1" data-bind="prof.ruecklage" value="${p.ruecklage||""}"><span>€</span></div></div>
+    <div class="field"><span class="lab">An welchen Tagen darf es um die Vorhaben gehen?</span><div class="chips">${[1,2,3,4,5,6,0].map(d=>`<button class="chip" data-a="tag" data-id="${d}" data-key="ptag${d}" aria-pressed="${p.tage.includes(d)}">${WT[d]}</button>`).join("")}</div><span class="hint">An allen anderen Tagen schlägt die App nur Schritte für dein Leben vor. Heute zählt einmalig als Vorhabentag.</span></div>
+    <div class="field"><span class="lab">Wie viele Stunden pro Woche, für alle Vorhaben zusammen?</span><div class="chips">${[1,2,3,4,6,8].map(h=>`<button class="chip" data-a="std" data-id="${h}" data-key="pstd${h}" aria-pressed="${p.stunden==h}">${h}</button>`).join("")}</div></div>
     <div class="field"><span class="lab">Umsatzsteuer</span><div class="chips"><button class="chip" data-a="ust" data-id="0" data-key="ust0" aria-pressed="${!p.ust}">Kleinunternehmer</button><button class="chip" data-a="ust" data-id="1" data-key="ust1" aria-pressed="${!!p.ust}">Mit Umsatzsteuer</button></div><span class="hint">Als Kleinunternehmer berechnest du keine Umsatzsteuer, solange der Umsatz aller Vorhaben unter ${RECHT.kuVorjahr.toLocaleString("de-DE")} € bleibt. Mit Umsatzsteuer rechnet die App deine Preise als Bruttopreise.</span></div>
     <div id="rahmenOut">${rahmenOut()}</div>
     <button class="btn wide" data-a="profilSave">Speichern</button>`},
@@ -523,11 +544,12 @@ const SHEETS={
   form(o){const v=vById(o.vid); const rows=o.form==="gewa"?gewaRows(v):fseRows();
     return`${head(o.form==="gewa"?"Formular":"Formular",o.form==="gewa"?"Gewerbeanmeldung":"Fragebogen zur steuerlichen Erfassung")}
     <p class="muted small">${o.form==="gewa"?"Die Angaben für das Formular GewA 1, vorbereitet aus deinem Vorhaben. Persönliche Daten wie Anschrift und Ausweis trägst du im Portal selbst ein.":"Die wichtigsten Angaben für ELSTER, berechnet aus der Rechnung aller Vorhaben. Prüfe jede Zahl, bevor du sie überträgst."}</p>
+    ${o.form==="gewa"?`<div class="field"><label for="g-start">Beginn</label><input id="g-start" type="date" data-bind="v.${v.id}.start" value="${esc(v.start||"")}"></div>`:""}
     <div>${rows.map((r,i)=>`<div class="formrow"><div><p class="k">${esc(r[0])}</p><p class="v" id="fv${i}">${esc(r[1])}</p>${r[2]?`<p class="muted small">${esc(r[2])}</p>`:""}</div><button class="btn small ghost" data-a="copy" data-src="fv${i}">Kopieren</button></div>`).join("")}</div>
     ${o.form==="gewa"?`<button class="btn ghost wide" data-a="auftrag" data-id="${v.id}" data-task="a_amt">Zuständiges Amt finden lassen</button>`:`<a class="btn ghost wide" href="https://www.elster.de" target="_blank" rel="noopener">Zu ELSTER</a>`}`},
 
   time(o){const act=aktive(); const vid=o.vid||(act[0]&&act[0].id)||"";
-    return`${head("Steuerzeit","Zeit für die Vorhaben eintragen","var(--neben)")}
+    return`${head("Vorhabenzeit","Zeit für die Vorhaben eintragen","var(--neben)")}
     <p class="muted small">Was du für die Vorhaben tust, zählt hier: Mails, Absprachen, Aufträge. Daraus entsteht das Gleichgewicht im Mobile.</p>
     ${act.length?`<div class="field"><span class="lab">Für welches Vorhaben?</span><div class="chips">${act.map(v=>`<button class="chip" data-a="tvid" data-id="${v.id}" data-key="tv${v.id}" aria-pressed="${vid===v.id}">${esc(v.name)}</button>`).join("")}</div></div>`:""}
     <div class="field"><span class="lab">Wie lange?</span><div class="chips">${[15,30,45,60,90,120].map(m=>`<button class="chip" data-a="tmin" data-id="${m}" data-key="tm${m}" aria-pressed="${SH.min==m}">${m<60?m+" Min.":(m/60).toLocaleString("de-DE")+" Std."}</button>`).join("")}</div></div>
@@ -538,10 +560,10 @@ const SHEETS={
     return`${head(v.name,"Einen "+t.lauf+" abrechnen")}
     <p class="muted small">Die Felder sind mit der Rechnung vorbelegt. Trag ein, was wirklich war.</p>
     <div class="field"><label for="r-d">Datum</label><input id="r-d" type="date" value="${today()}"></div>
-    <div class="grid2"><div class="field"><label for="r-u">Umsatz</label><div class="suffix"><input id="r-u" type="number" inputmode="decimal" value="${Math.round(r.umsatz)}"><span>€</span></div></div>
-    <div class="field"><label for="r-k">Kosten gesamt</label><div class="suffix"><input id="r-k" type="number" inputmode="decimal" value="${Math.round(r.kosten)}"><span>€</span></div></div>
-    <div class="field"><label for="r-m">Deine Stunden</label><div class="suffix"><input id="r-m" type="number" inputmode="decimal" value="${n0(v.calc.meineStd)}"><span>Std.</span></div></div>
-    <div class="field"><label for="r-t">Team-Stunden</label><div class="suffix"><input id="r-t" type="number" inputmode="decimal" value="${n0(v.calc.teamStd)}"><span>Std.</span></div></div></div>
+    <div class="grid2"><div class="field"><label for="r-u">Umsatz</label><div class="suffix"><input id="r-u" type="text" inputmode="decimal" data-num="1" value="${Math.round(r.umsatz)}"><span>€</span></div></div>
+    <div class="field"><label for="r-k">Kosten gesamt</label><div class="suffix"><input id="r-k" type="text" inputmode="decimal" data-num="1" value="${Math.round(r.kosten)}"><span>€</span></div></div>
+    <div class="field"><label for="r-m">Deine Stunden</label><div class="suffix"><input id="r-m" type="text" inputmode="decimal" data-num="1" value="${dz(n0(v.calc.meineStd))}"><span>Std.</span></div></div>
+    <div class="field"><label for="r-t">Team-Stunden</label><div class="suffix"><input id="r-t" type="text" inputmode="decimal" data-num="1" value="${dz(n0(v.calc.teamStd))}"><span>Std.</span></div></div></div>
     <div class="field"><label for="r-n">Notiz</label><input id="r-n" type="text" placeholder="Was lief gut, was nicht?"></div>
     <button class="btn wide" data-a="saveRun" data-id="${v.id}">Abrechnen</button>`},
 
@@ -550,7 +572,7 @@ const SHEETS={
     <div class="field"><label for="m-n">Name oder Rolle</label><input id="m-n" type="text" placeholder="zum Beispiel Standleitung Jana"></div>
     <div class="field"><span class="lab">Beschäftigung</span><div class="chips">${[["kurz","Kurzfristig (Saison)"],["mini","Minijob"],["frei","Selbstständig"],["partner","Partner auf Provision"]].map(([k,l])=>`<button class="chip" data-a="mform" data-id="${k}" data-key="mf${k}" aria-pressed="${(SH.form||"kurz")===k}">${l}</button>`).join("")}</div>
     <span class="hint">${(SH.form||"kurz")==="kurz"?"Bis drei Monate oder "+RECHT.kurzTage+" Arbeitstage im Jahr, ohne Sozialabgaben. Passt zur Weihnachtsmarktsaison.":(SH.form==="mini")?"Bis "+RECHT.minijob+" € im Monat, rund "+RECHT.minijobAbgabe+" % Pauschalabgaben für dich.":SH.form==="partner"?"Ein Laden, Hof oder Stand, der für dich verkauft und dafür eine Provision behält. Kein Arbeitsverhältnis, aber eine Kommissionsvereinbarung.":"Nur, wenn die Person wirklich frei ist: eigene Zeiten, eigene Mittel, mehrere Auftraggeber. Sonst droht Scheinselbstständigkeit."}</span></div>
-    <div class="field" ${SH.form==="partner"?"hidden":""}><label for="m-l">Stundenlohn</label><div class="suffix"><input id="m-l" type="number" inputmode="decimal" value="${Math.max(RECHT.mindestlohn,n0(v.calc.lohn))}"><span>€</span></div><span class="hint">Mindestlohn ${fill("{ml}")} €. Für die Standleitung, die Verantwortung trägt, ist mehr angemessen.</span></div>
+    <div class="field" ${SH.form==="partner"?"hidden":""}><label for="m-l">Stundenlohn</label><div class="suffix"><input id="m-l" type="text" inputmode="decimal" data-num="1" value="${dz(Math.max(RECHT.mindestlohn,n0(v.calc.lohn)))}"><span>€</span></div><span class="hint">Mindestlohn ${fill("{ml}")} €. Für die Standleitung, die Verantwortung trägt, ist mehr angemessen.</span></div>
     <button class="btn wide" data-a="saveMember" data-id="${v.id}">Hinzufügen</button>`},
 
   people(){return`${head("Leben","Nahe Menschen","var(--leben)")}
@@ -578,7 +600,7 @@ const SHEETS={
   explain(o){const T={
       umsatz:["Umsatz im Jahr","Preis mal Stückzahl mal Läufe pro Jahr, für alle aktiven Vorhaben zusammen. Für die Kleinunternehmerregelung zählt der Nettoumsatz aller Tätigkeiten unter deinem Namen. Grenze im Vorjahr "+RECHT.kuVorjahr.toLocaleString("de-DE")+" €, im laufenden Jahr "+RECHT.kuLaufend.toLocaleString("de-DE")+" €."],
       gewinn:["Gewinn im Jahr","Gewinn pro Lauf mal Läufe pro Jahr, wobei 15 Prozent der Läufe ausfallen (Wetter, Krankheit, Absagen), minus Kosten pro Jahr. Startkosten sind nicht abgezogen. Der Gewinn kommt zu deinem Einkommen und wird mit deinem persönlichen Steuersatz besteuert. Lege grob ein Viertel davon zurück."],
-      zeit:["Steuerzeit","Alles, was du selbst für die Vorhaben tust, in den letzten sieben Tagen. Dein Rahmen sind "+S.prof.stunden+" Stunden pro Woche. Liegt die Zeit darüber, neigt sich das Mobile zu den Vorhaben."],
+      zeit:["Vorhabenzeit","Alles, was du selbst für die Vorhaben tust, in den letzten sieben Tagen. Dein Rahmen sind "+S.prof.stunden+" Stunden pro Woche. Liegt die Zeit darüber, neigt sich das Mobile zu den Vorhaben."],
       menschen:["Menschen gesehen","Wie viele deiner nahen Menschen du in den letzten 14 Tagen eingetragen hast. Weniger als die Hälfte lässt das Mobile zu den Vorhaben kippen."],
       kapital:["Geld bis zum Start","Was du vorstrecken musst, bevor Geld zurückkommt: Startkosten, Kosten pro Jahr und bei Saisonvorhaben die Standgebühren der Saison und etwa 40 Prozent der Saisonware, weil beides meist im Voraus bezahlt wird. Bei anderen Vorhaben zwei Läufe Vorlauf."],
       deckel:["Wie viel Geld du einsetzen kannst","Von deinen Rücklagen bleiben feste Ausgaben als Notgroschen unberührt: drei Monate, wenn du angestellt oder verbeamtet bist, sonst sechs. Vom Rest schlagen wir für das erste Vorhaben höchstens 10 Prozent vor, für jedes weitere 15 Prozent und für alle zusammen 30 Prozent. Das erste Vorhaben ist auch Lehrgeld. Das ist eine Faustregel zur Vorsicht, keine Anlageberatung."]
@@ -597,6 +619,7 @@ const SHEETS={
     <div class="chips"><button class="btn ghost small" data-a="export">Sicherung kopieren</button>${IN_FRAME?"":`<button class="btn ghost small" data-a="exportFile">Als Datei sichern</button>`}<button class="btn ghost small" data-a="sheet" data-id="import">Sicherung laden</button></div>
     <div class="wirehead"><span class="eyebrow">Neu anfangen</span></div>
     <div class="chips">${S.demo?`<button class="btn ghost small" data-a="demoOff">Beispiel löschen</button>`:`<button class="btn ghost small" data-a="demoOn">Beispiel laden</button>`}<button class="btn ghost small" data-a="reset1">Alles löschen</button></div>
+    ${SH.demoAsk?`<div class="note"><strong>Beispiel laden?</strong><span>Deine eigenen Daten werden gesichert und kommen zurück, wenn du das Beispiel wieder löschst.</span><div><button class="btn small" data-a="demoOn" data-ok="1">Ja, Beispiel laden</button></div></div>`:""}
     ${SH.reset?`<div class="note leben"><strong>Wirklich alles löschen?</strong><span>Rahmen, Vorhaben, Menschen und Verlauf gehen verloren. Das lässt sich nicht rückgängig machen.</span><div><button class="btn leben small" data-a="reset2">Ja, alles löschen</button></div></div>`:""}
     <p class="muted small">Nebenexistenz · Stand ${esc(BUILD)} · Rechtsstand ${RECHT.stand}. Die App erklärt und bereitet vor. Sie ersetzt keine Steuer- oder Rechtsberatung. © Carlo Maximilian Engeländer. Alle Rechte vorbehalten.</p>`},
 
@@ -608,6 +631,7 @@ const SHEETS={
 };
 const MOMENTE={
   team:{t:"Jemand arbeitet mit.",x:"Durch dein Vorhaben hat jetzt ein anderer Mensch bezahlte Arbeit. Das ist ein Teil dessen, wofür die Nebenexistenz da ist."},
+  gew:{t:"Dein Gewerbe ist angemeldet.",x:"Das war der größte Schritt auf dem Papier. Ab jetzt meldet sich das Finanzamt mit dem Fragebogen, und die IHK schickt einen Brief. Beides ist normal."},
   first:{t:"Das erste Vorhaben hängt.",x:"Es hängt rechts am Mobile. Jedes Bauteil, das dazukommt, erscheint als Punkt am Draht, und die Form wird größer."},
   amt:{t:"Alles angemeldet.",x:"Die Pflichtschritte vor dem Start sind erledigt. Ab jetzt ist das Vorhaben legal und steuerlich erfasst."},
   lauf:{t:"Der erste Lauf ist abgerechnet.",x:"Jetzt gibt es echte Zahlen statt Schätzungen. Vergleich sie mit der Rechnung und pass die Rechnung an."},
@@ -620,7 +644,8 @@ function rahmenOut(){const r=rahmen();
 }
 function gewaRows(v){const t=tplOf(v), f=t.f;
   return[
-    ["Angemeldete Tätigkeit",t.taetig,"Möglichst genau, aber nicht zu eng. Unter dem Namen „"+v.name+"“."],
+    ["Angemeldete Tätigkeit",t.taetig,"Möglichst genau, aber nicht zu eng. Ändere es, wenn du zum Beispiel selbst herstellst."],
+    ["Geschäftsbezeichnung",v.name,"Als Einzelunternehmen ohne Handelsregister darfst du diesen Namen nutzen. Auf Rechnungen und Briefen muss zusätzlich dein Vor- und Nachname stehen."],
     ["Art der Anmeldung","Neuerrichtung, Hauptniederlassung",aktive().length>1?"Führst du schon ein Gewerbe, reicht oft eine Ummeldung mit erweiterter Tätigkeit.":""],
     ["Im Nebenerwerb","Ja",""],
     ["Rechtsform","Einzelunternehmen",""],
@@ -652,10 +677,11 @@ const VSUB={
     <p class="muted small">${esc(v.desc||tplOf(v).kurz)}</p>
     ${v.exit?"":`<button class="linkbtn" data-a="delV" data-id="${v.id}">Vorhaben abhängen und löschen</button>`}`},
 
-  rechnung(v){const c=v.calc,t=tplOf(v);
-    const F=(k,l,u,h)=>`<div class="field"><label for="c-${k}">${l}</label><div class="suffix"><input id="c-${k}" type="number" inputmode="decimal" step="any" data-bind="v.${v.id}.calc.${k}" value="${c[k]==null?"":c[k]}"><span>${u}</span></div>${h?`<span class="hint">${h}</span>`:""}</div>`;
+  rechnung(v){const c=v.calc,t=tplOf(v),r0=calc(v);
+    const F=(k,l,u,h)=>`<div class="field"><label for="c-${k}">${l}</label><div class="suffix"><input id="c-${k}" type="text" inputmode="decimal" data-num="1" data-bind="v.${v.id}.calc.${k}" value="${dz(c[k])}"><span>${u}</span></div>${h?`<span class="hint">${h}</span>`:""}</div>`;
     return`<p class="muted small">Alles bezieht sich auf einen ${t.lauf}. Die Startwerte sind typisch für die Vorlage. Ändere sie auf deine Lage.</p>
-    <div class="grid2">${F("preis","Preis pro Stück","€")}${F("kosten","Kosten pro Stück","€")}${F("stueck","Stück pro "+t.lauf,"Stk.")}${F("stand",t.f.versand?"Plattform und Porto":"Stand oder Miete","€")}${F("lohn","Lohn Team","€/Std.")}${F("teamStd","Team-Stunden","Std.")}${F("meineStd","Deine Stunden","Std.")}${F("fix","Sonstiges","€")}${F("prov",t.f.kommission?"Provision":"Gebühren","%",t.f.kommission?"Was die Läden behalten, üblich sind 25 bis 40 Prozent.":"Kartenzahlung oder Plattform, meist 1 bis 12 Prozent.")}${F("schwund","Schwund","%","Ware, die verdirbt, kaputtgeht oder übrig bleibt.")}${F("jahr","Kosten pro Jahr","€","Versicherung, Konto, Beiträge, Lizenzen.")}${F("laeufe","Läufe pro Jahr","")}${F("start","Startkosten","€","Einmalig: Stand, Werkzeug, erste Ausstattung.")}</div>
+    <div class="grid2">${F("preis","Preis pro Stück","€")}${F("kosten","Kosten pro Stück","€")}${F("stueck","Stück pro "+t.lauf,"Stk.")}${F("stand",t.f.versand?"Plattform und Porto":t.f.kommission?"Regalmiete":"Stand oder Miete","€",r0.saison?"Pro "+t.lauf+". Bei Saisonmiete die Gesamtmiete durch die Zahl der Tage teilen.":"")}</div>
+    <details class="more" data-key="calc-${v.id}" ${OPEN.has("calc-"+v.id)?"open":""}><summary>Weitere Annahmen: Team, Zeit, Gebühren, Schwund, Kosten pro Jahr</summary><div class="grid2">${F("lohn","Lohn Team","€/Std.")}${F("teamStd","Team-Stunden","Std.")}${F("meineStd","Deine Stunden","Std.")}${F("fix","Sonstiges","€")}${F("prov",t.f.kommission?"Provision":"Gebühren","%",t.f.kommission?"Was die Läden behalten, üblich sind 25 bis 40 Prozent.":"Kartenzahlung oder Plattform, meist 1 bis 12 Prozent.")}${F("schwund","Schwund","%","Ware, die verdirbt, kaputtgeht oder übrig bleibt.")}${F("jahr","Kosten pro Jahr","€","Versicherung, Konto, Beiträge, Lizenzen.")}${F("laeufe","Läufe pro Jahr","")}${F("start","Startkosten","€","Einmalig: Stand, Werkzeug, erste Ausstattung.")}</div></details>
     <div class="field"><span class="lab">Beschäftigung im Team</span><div class="chips">${[["kurz","Kurzfristig"],["mini","Minijob"],["keine","Kein Team"]].map(([k,l])=>`<button class="chip" data-a="cform" data-id="${k}" data-vid="${v.id}" data-key="cf${k}" aria-pressed="${(c.form||"kurz")===k}">${l}</button>`).join("")}</div></div>
     <div id="calcOut">${calcOut(v)}</div>
     ${v.passOk?`<p class="pill ok">Passung bestätigt am ${dateDE(v.passOk)}</p>`:""}
@@ -664,9 +690,10 @@ const VSUB={
     ${v.passOk?"":`<button class="btn wide" data-a="passOk" data-id="${v.id}">Passung bestätigen</button><p class="muted small">Damit sagst du: Ich habe Rechnung, Geldbedarf und Werte angesehen und will weitermachen.</p>`}
     <button class="btn ghost wide" data-a="auftrag" data-id="${v.id}" data-task="a_kalk">Rechnung von Claude prüfen lassen</button>`},
 
-  pflichten(v){const ds=dutiesFor(v);
+  pflichten(v){const ds=dutiesFor(v), n=stage(v);
     return`<p class="muted small">Abgeleitet aus ${esc(landN())}, deinem Hauptberuf und der Vorlage. Bauteil „Angemeldet“ gibt es, wenn alle Schritte vor dem Start erledigt sind.</p>`+
-    ["vor","team","laufend","exit"].map(w=>{const l=ds.filter(d=>d.w===w);return l.length?`<div class="wirehead"><span class="eyebrow">${PFLICHT_PHASEN[w]}</span></div><div>${l.map(d=>dutyRow(v,d,false)).join("")}</div>`:""}).join("")+
+    ["vor","team","laufend","exit"].map(w=>{const l=ds.filter(d=>d.w===w);if(!l.length)return"";const rows=l.map(d=>dutyRow(v,d,false)).join("");
+      return phaseOpen(w,v,n)?`<div class="wirehead"><span class="eyebrow">${PFLICHT_PHASEN[w]}</span></div><div>${rows}</div>`:phaseLater(w,"ph-"+v.id+w,l.length,rows)}).join("")+
     (tplOf(v).f.kurs?"":`<button class="btn ghost wide" data-a="sheet" data-id="form" data-form="gewa" data-vid="${v.id}">Gewerbeanmeldung vorbereitet</button>`)},
 
   auftraege(v){const f=tplOf(v).f, list=AUFTRAEGE.filter(a=>!a.f||f[a.f]);
@@ -695,29 +722,31 @@ const VSUB={
     const reasons=[];
     if(n>=7) reasons.push(["ok","Es trägt sich: drei Läufe mit Gewinn, einer davon ganz ohne dich."]);
     if(v.team.length) reasons.push(["ok","Es gibt jemanden, der den Alltag kennt und es übernehmen könnte."]);
-    if(mood!=null&&mood<2.6) reasons.push(["warn","Die Steuerzeit für dieses Vorhaben tut dir zuletzt nicht gut."]);
-    if(r.wochenStd>n0(S.prof.stunden)*0.6) reasons.push(["warn","Es braucht mehr als die Hälfte deiner Steuerzeit."]);
+    if(mood!=null&&mood<2.6) reasons.push(["warn","Die Vorhabenzeit für dieses Vorhaben tut dir zuletzt nicht gut."]);
+    if(r.wochenStd>n0(S.prof.stunden)*0.6) reasons.push(["warn","Es braucht mehr als die Hälfte deiner Vorhabenzeit."]);
     if(last&&n0(last.umsatz)-n0(last.kosten)<=0) reasons.push(["warn","Der letzte Lauf hatte keinen Gewinn."]);
     const ripe=n>=7||reasons.some(x=>x[0]==="warn");
     return`<div class="note ${ripe?"sinn":"neben"}"><strong>${n>=7?"Ein guter Moment zum Weitergeben.":ripe?"Weitergeben oder Pause ist eine Überlegung wert.":"Noch zu früh."}</strong><span>${n>=7||ripe?"Ein Vorhaben, das sich trägt, ist für andere am meisten wert. Ein Verkauf gibt dir Geld und Zeit zurück und jemand anderem eine eigene Existenz.":"Weitergeben lohnt sich meist, wenn das Vorhaben eine Saison oder mehrere Läufe ohne dich getragen hat."}</span></div>
     ${reasons.length?`<div class="list">${reasons.map(([k,t])=>`<div class="li" style="cursor:default"><span class="pill ${k==="ok"?"ok":"warn"}">${k==="ok"?"spricht dafür":"Achtung"}</span><span class="grow small">${esc(t)}</span></div>`).join("")}</div>`:""}
     <div class="field"><span class="lab">Wie weitergeben?</span><div class="chips">${[["komplett","Komplett verkaufen"],["anteil","Mit Beteiligung"],["einstellen","Einstellen"]].map(([k,l])=>`<button class="chip" data-a="exitArt" data-id="${k}" data-key="ea${k}" aria-pressed="${art===k}">${l}</button>`).join("")}</div>
     <span class="hint">${art==="komplett"?"Empfohlen. Ein klarer Schnitt passt zu einer Nebenexistenz mit wenig Verwaltung: Preis gezahlt, Gewerbe abgemeldet, fertig.":art==="anteil"?"Mit Beteiligung bleibst du Mitunternehmer oder stiller Gesellschafter. Das heißt Verträge, Abrechnungen und Steuern auf Dauer. Es widerspricht dem Ziel, wenig Verwaltung zu haben.":"Ohne Verkauf meldest du das Gewerbe ab und verkaufst das Inventar. Auch das ist eine gute Entscheidung, wenn es nicht mehr passt."}</span></div>
-    ${art!=="einstellen"?`<div class="field"><label for="x-inv">Wert des Inventars heute</label><div class="suffix"><input id="x-inv" type="number" inputmode="decimal" data-bind="v.${v.id}.calc.inventar" value="${v.calc.inventar||""}"><span>€</span></div><span class="hint">Stand, Kasse, Vorrat, Werkzeug, zum heutigen Zeitwert.</span></div>
+    ${art!=="einstellen"?`<div class="field"><label for="x-inv">Wert des Inventars heute</label><div class="suffix"><input id="x-inv" type="text" inputmode="decimal" data-num="1" data-bind="v.${v.id}.calc.inventar" value="${v.calc.inventar||""}"><span>€</span></div><span class="hint">Stand, Kasse, Vorrat, Werkzeug, zum heutigen Zeitwert.</span></div>
     <div id="preisOut"><div class="figs"><div class="fig"><span class="k">Preisorientierung</span><span class="v num">${eur(pr[0])} – ${eur(pr[1])}</span><span class="e">Inventar plus ein halber bis ganzer Jahresgewinn</span></div><div class="fig"><span class="k">Jahresgewinn</span><span class="v num">${eur(pr[2])}</span><span class="e">${v.runs.length>=2?"hochgerechnet aus "+v.runs.length+" abgerechneten Läufen":"noch geschätzt, aus der Rechnung"}</span></div></div></div>
     <p class="muted small">Eine grobe Faustregel für sehr kleine Betriebe, kein Gutachten. Was jemand zahlt, hängt an Lieferkontakten und daran, wie sicher die Zahlen sind. Standplatzzusagen sind meist persönlich und gehen nicht automatisch mit über. Kläre mit dem Veranstalter, ob er die neue Person übernimmt.</p>
     ${v.team.some(m=>m.form!=="partner")?`<div class="note sinn"><strong>Am naheliegendsten: Verkauf an ${esc(v.team.find(m=>m.form!=="partner").name)}</strong><span>Wer den Alltag schon kennt, ist oft die beste Käuferin. Ein fairer Weg sind 30 Prozent Anzahlung und der Rest in 12 bis 24 Monatsraten, mit Eigentumsvorbehalt am Inventar, dazu eine Saison Begleitung. Mit dem Kauf endet das Arbeitsverhältnis bei dir.</span><div><button class="btn small sinn" data-a="auftrag" data-id="${v.id}" data-task="a_kaeufer">Verkauf an die Standleitung vorbereiten</button></div></div>`:""}
     <div class="chips"><button class="btn ghost small" data-a="auftrag" data-id="${v.id}" data-task="a_expose">Exposé schreiben lassen</button><button class="btn ghost small" data-a="auftrag" data-id="${v.id}" data-task="a_vertrag2">Vertrag entwerfen</button></div>`:""}
     <div class="wirehead"><span class="eyebrow">Bei der Übergabe</span></div>${dutiesFor(v).filter(d=>d.w==="exit").map(d=>dutyRow(v,d,false)).join("")}
     <div class="wirehead"><span class="eyebrow">Abschließen</span></div>
-    ${art!=="einstellen"?`<div class="grid2"><div class="field"><label for="x-preis">Vereinbarter Preis</label><div class="suffix"><input id="x-preis" type="number" inputmode="decimal" value="${pr[0]||""}"><span>€</span></div></div><div class="field"><label for="x-an">An wen</label><input id="x-an" type="text" placeholder="Vorname"></div></div>`:""}
-    <button class="btn wide sinn" data-a="doExit" data-id="${v.id}" data-art="${art}">${art==="einstellen"?"Als eingestellt markieren":"Als übergeben markieren"}</button>`}
+    ${art!=="einstellen"?`<div class="grid2"><div class="field"><label for="x-preis">Vereinbarter Preis</label><div class="suffix"><input id="x-preis" type="text" inputmode="decimal" data-num="1" value="${pr[0]||""}"><span>€</span></div></div><div class="field"><label for="x-an">An wen</label><input id="x-an" type="text" placeholder="Vorname"></div></div>`:""}
+    ${SH.exitAsk?`<div class="note leben"><strong>Es hat sich noch nicht getragen.</strong><span>Du kannst trotzdem abschließen, zum Beispiel wenn es dir nicht mehr guttut.</span></div>`:""}
+    <button class="btn wide sinn" data-a="doExit" data-id="${v.id}" data-art="${art}">${SH.exitAsk?"Ja, trotzdem abschließen":art==="einstellen"?"Als eingestellt markieren":"Als übergeben markieren"}</button>`}
 };
 function calcOut(v){const r=calc(v),t=tplOf(v),R=rahmen(),c=v.calc;
   const w=[];
   if(n0(c.lohn)>0&&n0(c.lohn)<RECHT.mindestlohn&&(c.form||"kurz")!=="keine") w.push("Der Teamlohn liegt unter dem Mindestlohn von "+fill("{ml}")+" €.");
   if(R.gesetzt&&r.kapital>R.deckel) w.push("Bis zum ersten Lauf brauchst du etwa "+eur(r.kapital)+". Das liegt über deinem Deckel von "+eur(R.deckel)+(R.erstes?" für das erste Vorhaben":"")+". Fang kleiner an oder spar die Differenz vorher an.");
   if(R.gesetzt&&R.gebunden>R.gesamt) w.push("Alle Vorhaben zusammen binden etwa "+eur(R.gebunden)+". Das ist mehr als 30 Prozent deines freien Geldes ("+eur(R.gesamt)+").");
+  if(t.f.markt&&new Date().getMonth()>=7&&!v.duties.platz) w.push("Für die Saison in diesem Jahr sind die meisten Marktplätze schon vergeben. Plane für das nächste Jahr, oder fang mit einem Platz an einem bestehenden Stand an.");
   if(r.wochenStd>n0(S.prof.stunden)) w.push("Allein dieses Vorhaben braucht im Schnitt "+r.wochenStd.toLocaleString("de-DE",{maximumFractionDigits:1})+" Stunden pro Woche. Das ist mehr als dein ganzer Rahmen.");
   if(!S.prof.ust&&jahresUmsatzAlle()>RECHT.kuVorjahr) w.push("Alle Vorhaben zusammen liegen über 25.000 € Umsatz. Die Kleinunternehmerregelung entfällt dann im Folgejahr. Stell im Rahmen auf Umsatzsteuer um, dann rechnet die App mit Nettopreisen.");
   const pct=Math.round(r.abg*100);
@@ -817,7 +846,7 @@ document.addEventListener("click",e=>{
   const H=ACT[a]; if(H){ if(el.tagName==="A"&&a!=="claudeGo") e.preventDefault(); H(d,el,e) }
 });
 document.addEventListener("keydown",e=>{
-  if(e.key==="Escape"&&SH) closeSheet();
+  if(e.key==="Escape"&&SH) backSheet();
   if((e.key==="Enter"||e.key===" ")&&e.target.classList&&e.target.classList.contains("mob-hit")){e.preventDefault();e.target.dispatchEvent(new MouseEvent("click",{bubbles:true}))}
   if(e.key==="Tab"&&SH){const f=[...$("#sheet").querySelectorAll("button,a,input,select,textarea,[tabindex]")].filter(x=>!x.disabled&&x.offsetParent!==null&&x.tabIndex>=0);if(!f.length)return;
     if(e.shiftKey&&document.activeElement===f[0]){e.preventDefault();f[f.length-1].focus()}else if(!e.shiftKey&&document.activeElement===f[f.length-1]){e.preventDefault();f[0].focus()}}
@@ -830,7 +859,7 @@ document.addEventListener("input",e=>{
   const parts=b.split("."); let obj=S, i=0;
   if(parts[0]==="v"){obj=vById(parts[1]);i=2;if(!obj)return}
   for(;i<parts.length-1;i++){obj=obj[parts[i]]=obj[parts[i]]||{}}
-  const k=parts[parts.length-1], val=e.target.type==="number"?(e.target.value===""?"":n0(e.target.value)):e.target.value;
+  const k=parts[parts.length-1], val=e.target.dataset.num?(e.target.value.trim()===""?"":n0(e.target.value)):e.target.value;
   obj[k]=val; save();
   if(parts[0]==="v"&&parts[2]==="calc"){const v=vById(parts[1]);const o=$("#calcOut");if(o)o.innerHTML=calcOut(v);const po=$("#preisOut");if(po&&SH)renderSheetPart(v)}
   if(parts[0]==="prof"){const o=$("#rahmenOut");if(o)o.innerHTML=rahmenOut()}
@@ -841,18 +870,24 @@ function renderSheetPart(v){const pr=preisSpanne(v),r=calc(v),po=$("#preisOut");
 const ACT={
   tab:d=>{if(SH)closeSheet();setTab(d.id)},
   sheet:d=>{const o={};if(d.vid)o.vid=d.vid;if(d.wid)o.wid=d.wid;if(d.form)o.form=d.form;openSheet(d.id,o)},
-  close:()=>closeSheet(),
+  close:()=>backSheet(),
   venture:d=>openSheet("venture",{vid:d.id,sub:d.sub||"bauteile"}),
   sub:d=>{SH.sub=d.id;SH.art=null;renderSheet()},
   auftrag:d=>openSheet("auftrag",{vid:d.id,task:d.task,duty:d.duty||""}),
   explain:d=>openSheet("explain",{eid:d.id}),
-  later:()=>{S.override="";toast("Gut. Der Schritt wartet.");},
-  override:()=>{S.override=today();save();render();toast("Heute darfst du kurz steuern. Morgen gilt wieder dein Rahmen.")},
+  later:()=>{S.lifeLater=today();save();render()},
+  override:()=>{S.override=today();save();render();toast("Für heute zeigt die App auch Schritte für die Vorhaben. Morgen gilt wieder dein Rahmen.")},
   seen:d=>{const p=S.people.find(x=>x.id===d.id);if(!p)return;const sn=snapshot();p.last=today();save();render();if(SH)renderSheet();buzz("ok");toast(p.name+" eingetragen.",sn,true)},
-  hintOff:d=>{S.hintsOff[d.id]=1;S.hint={d:today(),id:""};save();render()},
-  welcomeGo:()=>{S.onb=true;save();openSheet("profil")},
-  demoOn:()=>{loadDemo();S.onb=true;save();if(SH)closeSheet();render();toast("Beispiel geladen.")},
-  demoOff:()=>{const keep=S.settings;S=fresh();S.settings=keep;S.onb=true;save();if(SH)closeSheet();render();toast("Beispiel gelöscht.")},
+  hintOff:d=>{S.hintsOff[d.id]=1;S.hint={d:today(),id:"",done:1};save();render()},
+  welcomeGo:()=>{S.onb=true;if(!S.firstDay)S.firstDay=today();save();openSheet("profil",{},true)},
+  demoOn:d=>{const own=!S.demo&&(S.ventures.length||S.prof.land||S.people.length);
+    if(own&&!(d&&d.ok)&&SH&&SH.id==="settings"){SH.demoAsk=true;renderSheet();return}
+    if(own){try{localStorage.setItem(KEY+"-eigen",JSON.stringify(S))}catch(e){}}
+    loadDemo();S.onb=true;save();if(SH)closeSheet();render();toast(own?"Beispiel geladen. Deine Daten sind gesichert.":"Beispiel geladen.")},
+  demoOff:()=>{let back=null;try{back=localStorage.getItem(KEY+"-eigen")}catch(e){}
+    if(back){S=deepMerge(fresh(),JSON.parse(back));migrate();try{localStorage.removeItem(KEY+"-eigen")}catch(e){}}
+    else{const keep=S.settings;S=fresh();S.settings=keep;S.onb=true}
+    save();if(SH)closeSheet();render();toast(back?"Beispiel gelöscht. Deine Daten sind zurück.":"Beispiel gelöscht.")},
   beruf:d=>{S.prof.beruf=d.id;save();renderSheet()},
   ust:d=>{S.prof.ust=d.id==="1";save();renderSheet()},
   profilSave:()=>{if(!S.prof.land||!S.prof.beruf){const b=$("[data-a=profilSave]");b.classList.add("shake");setTimeout(()=>b.classList.remove("shake"),350);buzz("err");toast("Bitte Bundesland und Hauptberuf wählen.");return}save();closeSheet();buzz("ok");toast("Rahmen gespeichert.",null,true)},
@@ -864,9 +899,14 @@ const ACT={
   delV:d=>{const sn=snapshot();S.ventures=S.ventures.filter(v=>v.id!==d.id);delete S.lv[d.id];save();closeSheet();toast("Vorhaben gelöscht.",sn)},
   duty:d=>{const v=vById(d.id), du=PFLICHTEN.find(x=>x.id===d.duty), sn=snapshot();
     if(PERSON.has(du.id)){S.pduties[du.id]?delete S.pduties[du.id]:S.pduties[du.id]=today()} else {v.duties[du.id]?delete v.duties[du.id]:v.duties[du.id]=today()}
-    save(); if(SH)renderSheet(); render(); const on=dutyDone(v,du); if(on){buzz("ok");toast("Erledigt: "+du.t,sn,true)} },
+    const on=dutyDone(v,du); if(on&&du.id==="gew"&&!S.seen.gew){S.seen.gew=1;S.mq.push("gew")}
+    save(); if(SH)renderSheet(); render(); if(on){buzz("ok");toast("Erledigt: "+du.t,sn,true)} },
   pend:d=>{const v=vById(d.id);v.pending=v.pending||{};v.pending[d.duty]?delete v.pending[d.duty]:v.pending[d.duty]=today();save();if(SH)renderSheet();render()},
-  passOk:d=>{const v=vById(d.id);if(!(n0(v.calc.preis)>0&&n0(v.calc.stueck)>0)){buzz("err");toast("Trag zuerst Preis und Stückzahl ein.");return}v.passOk=today();save();renderSheet();render();buzz("ok");toast("Passung bestätigt.",null,true)},
+  passOk:d=>{const v=vById(d.id),r=calc(v),R=rahmen();const no=m=>{const b=$("[data-a=passOk]");if(b){b.classList.add("shake");setTimeout(()=>b.classList.remove("shake"),350)}buzz("err");toast(m)};
+    if(!(n0(v.calc.preis)>0&&n0(v.calc.stueck)>0)) return no("Trag zuerst Preis und Stückzahl ein.");
+    if(r.gewinn<=0) return no("Die Rechnung zeigt noch keinen Gewinn. Ändere Preis oder Kosten.");
+    if(R.gesetzt&&r.kapital>R.deckel) return no("Das nötige Geld liegt über deinem Rahmen. Fang kleiner an oder pass den Rahmen an.");
+    SH.sub="bauteile";v.passOk=today();save();renderSheet();render();buzz("ok");toast("Passung bestätigt.",null,true)},
   cform:d=>{const v=vById(d.vid);v.calc.form=d.id;save();renderSheet()},
   wert:d=>{const v=vById(d.id);v.werte[d.w]=v.werte[d.w]===d.val?undefined:d.val;if(!v.werte[d.w])delete v.werte[d.w];save();renderSheet()},
   bio:d=>{const v=vById(d.id);v.bio[d.q]=v.bio[d.q]===d.val?undefined:d.val;if(!v.bio[d.q])delete v.bio[d.q];save();renderSheet()},
@@ -879,21 +919,24 @@ const ACT={
   tmood:d=>{SH.mood=SH.mood==d.id?0:+d.id;renderSheet()},
   saveTime:d=>{S.time.push({id:uid(),d:today(),vid:d.vid||"",min:SH.min,mood:SH.mood||null});S.time=S.time.slice(-400);save();closeSheet();buzz("ok");
     const b=balance();toast(b.state==="zieht"?"Eingetragen. Für diese Woche ist dein Rahmen erreicht.":"Eingetragen.",null,true)},
-  saveRun:d=>{const v=vById(d.id);v.runs.push({id:uid(),d:$("#r-d").value||today(),umsatz:n0($("#r-u").value),kosten:n0($("#r-k").value),meineStd:n0($("#r-m").value),teamStd:n0($("#r-t").value),note:$("#r-n").value.trim()});save();openSheet("venture",{vid:v.id,sub:"laeufe"});buzz("ok");toast("Lauf abgerechnet.",null,true)},
+  saveRun:d=>{const v=vById(d.id);v.runs.push({id:uid(),d:$("#r-d").value||today(),umsatz:n0($("#r-u").value),kosten:n0($("#r-k").value),meineStd:n0($("#r-m").value),teamStd:n0($("#r-t").value),note:$("#r-n").value.trim()});save();backTo("venture",{vid:v.id,sub:"laeufe"});buzz("ok");toast("Lauf abgerechnet.",null,true)},
   delRun:d=>{const v=vById(d.id),sn=snapshot();v.runs=v.runs.filter(r=>r.id!==d.rid);save();renderSheet();render();toast("Lauf gelöscht.",sn)},
   mform:d=>{SH.form=d.id;const keep={n:$("#m-n").value,l:$("#m-l").value};renderSheet();$("#m-n").value=keep.n;$("#m-l").value=keep.l},
   saveMember:d=>{const v=vById(d.id),nm=$("#m-n").value.trim();if(!nm){buzz("err");toast("Gib einen Namen oder eine Rolle ein.");return}
-    v.team.push({id:uid(),name:nm,form:SH.form||"kurz",lohn:n0($("#m-l").value)});if(v.solo)v.solo=false;save();openSheet("venture",{vid:v.id,sub:"team"});buzz("ok");toast(nm+" führt jetzt mit.",null,true)},
+    const fm=SH.form||"kurz";v.team.push({id:uid(),name:nm,form:fm,lohn:n0($("#m-l").value)});if(v.solo)v.solo=false;
+    if(fm==="kurz"||fm==="mini"){v.calc.form=fm;const emp=v.team.filter(m=>m.form==="kurz"||m.form==="mini");v.calc.lohn=Math.round(emp.reduce((a,m)=>a+n0(m.lohn),0)/emp.length*100)/100}
+    save();backTo("venture",{vid:v.id,sub:"team"});buzz("ok");toast(nm+" führt jetzt mit.",null,true)},
   delMember:d=>{const v=vById(d.id),sn=snapshot();v.team=v.team.filter(m=>m.id!==d.mid);save();renderSheet();render();toast("Entfernt.",sn)},
   solo:d=>{const v=vById(d.id);v.solo=!v.solo;save();renderSheet();render()},
   exitArt:d=>{SH.art=d.id;const v=vById(SH.vid);v.exitArt=d.id;save();renderSheet()},
-  doExit:d=>{const v=vById(d.id),sn=snapshot(),pi=$("#x-preis"),an=$("#x-an");v.exit={d:today(),art:d.art,preis:pi?n0(pi.value):0,an:an?an.value.trim():""};save();closeSheet();setTab("home");buzz("ok");toast("„"+v.name+"“ ist weitergegeben.",sn,true)},
-  addPerson:()=>{const i=$("#p-n"),nm=(i.value||"").trim();if(!nm)return;S.people.push({id:uid(),name:nm,last:""});save();renderSheet();render();setTimeout(()=>{const x=$("#p-n");if(x)x.focus()},30)},
+  doExit:d=>{const v0=vById(d.id);if(stage(v0)<7&&!SH.exitAsk){SH.exitAsk=true;renderSheet();const b=$("[data-a=doExit]");if(b)b.scrollIntoView({block:"center"});return}
+    const v=vById(d.id),sn=snapshot(),pi=$("#x-preis"),an=$("#x-an");v.exit={d:today(),art:d.art,preis:pi?n0(pi.value):0,an:an?an.value.trim():""};save();closeSheet();setTab("home");buzz("ok");toast("„"+v.name+"“ ist weitergegeben.",sn,true)},
+  addPerson:()=>{const i=$("#p-n"),nm=(i.value||"").trim();if(!nm)return;S.people.push({id:uid(),name:nm,last:"",added:today()});save();renderSheet();render();setTimeout(()=>{const x=$("#p-n");if(x)x.focus()},30)},
   delPerson:d=>{const sn=snapshot();S.people=S.people.filter(p=>p.id!==d.id);save();renderSheet();render();toast("Entfernt.",sn)},
   addWert:()=>{const i=$("#w-n"),w=(i.value||"").trim();if(!w||S.werte.includes(w))return;S.werte.push(w);save();renderSheet();render()},
   delWert:d=>{const sn=snapshot();S.werte.splice(+d.id,1);save();renderSheet();render();toast("Entfernt.",sn)},
-  tag:d=>{const x=+d.id,t=S.prof.tage;S.prof.tage=t.includes(x)?t.filter(y=>y!==x):[...t,x];save();render()},
-  std:d=>{S.prof.stunden=+d.id;save();render()},
+  tag:d=>{const x=+d.id,t=S.prof.tage;S.prof.tage=t.includes(x)?t.filter(y=>y!==x):[...t,x];save();render();if(SH)renderSheet()},
+  std:d=>{S.prof.stunden=+d.id;save();render();if(SH)renderSheet()},
   wmit:d=>{const w=SH.w;w.mit=w.mit.includes(d.id)?w.mit.filter(x=>x!==d.id):[...w.mit,d.id];w.weg=$("#w-weg").value;renderSheet()},
   wkraft:d=>{SH.w.kraft=d.id;SH.w.weg=$("#w-weg").value;renderSheet()},
   saveWeek:()=>{const w=SH.w;w.weg=$("#w-weg").value.trim();w.mit.forEach(id=>{const p=S.people.find(x=>x.id===id);if(p&&(!p.last||p.last<today()))p.last=today()});S.weeks.push({d:today(),kraft:w.kraft,weg:w.weg,mit:w.mit});save();closeSheet();buzz("ok");
@@ -905,7 +948,7 @@ const ACT={
   doImport:async()=>{let tx=($("#f-imp").value||"").trim();const f=$("#f-impfile").files[0];if(!tx&&f)tx=await f.text();
     try{const o=JSON.parse(tx);if(!o||typeof o!=="object"||!("prof" in o))throw 0;const sn=snapshot();S=deepMerge(fresh(),o);migrate();save();closeSheet();applyTheme();render();buzz("ok");toast("Sicherung geladen.",sn,true)}catch(e){buzz("err");toast("Das ist keine gültige Sicherung.")}},
   reset1:()=>{SH.reset=true;renderSheet()},
-  reset2:()=>{S=fresh();persist();closeSheet();applyTheme();render();openSheet("welcome")},
+  reset2:()=>{S=fresh();persist();try{localStorage.removeItem(KEY+"-eigen")}catch(e){}closeSheet();applyTheme();render();openSheet("welcome")},
   undo:()=>{if(!undoSnap)return;S=undoSnap;undoSnap=null;persist();$("#toast").classList.remove("on");if(SH)renderSheet();render()},
   logo:(d,el)=>{el.classList.add("spin");setTimeout(()=>el.classList.remove("spin"),520);if(SH)closeSheet();setTab("home")}
 };
@@ -945,7 +988,10 @@ function checkUpdate(){
     const go=()=>{if(busy()){setTimeout(go,4000);return}location.reload()};go()}).catch(()=>{});
 }
 function countOpen(){const t=today();if(S.opens.d===t)S.opens.n++;else S.opens={d:t,n:1};persist()}
-addEventListener("popstate",()=>{if(SH)closeSheet(true)});
+addEventListener("popstate",()=>{
+  if(backPending){backPending=false;const f=deferred;deferred=null;if(f)f();return}
+  if(!SH) return;
+  if(STACK.length){backSheet();try{history.pushState({sheet:1},"")}catch(e){}} else closeSheet(true)});
 addEventListener("resize",moveDot);
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"){countOpen();checkUpdate();if(!SH)render()}});
 
@@ -957,6 +1003,7 @@ document.addEventListener("visibilitychange",()=>{if(document.visibilityState===
 })();
 
 function boot(){
+  document.documentElement.lang="de";
   load(); applyTheme(); countOpen();
   if(!S.prof.tage) S.prof.tage=[2,6];
   const h=(location.hash||"").slice(1); if(TABS.some(t=>t[0]===h)) S.tab=h;

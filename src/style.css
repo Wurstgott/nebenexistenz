@@ -263,7 +263,28 @@ pre.prompt{white-space:pre-wrap;font:400 14px/1.5 var(--f-mono);background:var(-
   *,*::before,*::after{animation:none!important;transition:none!important}
   .sway{animation:none}
 }
-.seg{min-height:46px;flex-shrink:0}
 a.li{text-decoration:none;color:inherit}
 input[type=number]::-webkit-inner-spin-button,input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}input[type=number]{-moz-appearance:textfield}
 .grid2>.field{align-content:start}
+
+/* Runde 2: Lesbarkeit, Reiter, Legende, eingeklappte Bereiche */
+.seg{flex-wrap:wrap;overflow:visible}
+.balance{font:400 14px/1.4 var(--f-ui);color:var(--muted)}
+.legend{display:flex;justify-content:center;gap:16px;margin:6px 0 0;font:500 13px/1 var(--f-ui);color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.eyebrow{font-size:13px}
+.fig .k{font:600 13px/1.25 var(--f-ui);letter-spacing:0;text-transform:none}
+.duty .wer,.tl .v{font-size:13px}
+.pill{font-size:13px}
+.person .ago{font-size:13px}
+.stage:active .sway,.stage:hover .sway{animation-play-state:paused}
+.toast.up{top:calc(env(safe-area-inset-top,0px) + 12px);bottom:auto;transform:translate(-50%,-20px)}
+.toast.up.on{transform:translate(-50%,0)}
+details.more,details.phase{border:1px solid var(--line);border-radius:var(--r);padding:0 14px;background:var(--s1)}
+details.more>summary,details.phase>summary{min-height:48px;display:flex;align-items:center;gap:8px;cursor:pointer;font:600 15px/1.3 var(--f-ui);color:var(--neben);list-style:none}
+details.more>summary::-webkit-details-marker,details.phase>summary::-webkit-details-marker{display:none}
+details.more>summary::after,details.phase>summary::after{content:"";margin-left:auto;width:8px;height:8px;border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:rotate(45deg);flex:none}
+details.more[open]>summary::after,details.phase[open]>summary::after{transform:rotate(-135deg)}
+details.more>.grid2{padding-bottom:14px}
+.sheet .sbody{grid-auto-rows:max-content}
