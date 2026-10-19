@@ -73,19 +73,32 @@ self.addEventListener("fetch",e=>{{const r=e.request;if(r.method!=="GET")return;
 # Icons: das Mobile als Zeichen
 try:
     from PIL import Image, ImageDraw
+    import math
     def icon(n, path, pad=0.0):
         S = n * 4; im = Image.new('RGB', (S, S), '#E4E8E2'); d = ImageDraw.Draw(im)
-        k = S / 100; o = pad * S
-        f = lambda x: o + x * k * (1 - 2 * pad)
-        w = max(2, int(2.2 * k * (1 - 2 * pad)))
-        d.line([(f(50), f(10)), (f(50), f(30))], fill='#252B30', width=w)
-        d.arc([f(14), f(30), f(86), f(52)], 200, 340, fill='#252B30', width=w)
-        d.line([(f(20), f(37)), (f(20), f(52))], fill='#252B30', width=w)
-        d.ellipse([f(6), f(52), f(34), f(80)], fill='#AE432C')
-        d.line([(f(80), f(37)), (f(80), f(50))], fill='#252B30', width=w)
-        d.polygon([(f(80), f(48)), (f(96), f(76)), (f(64), f(76))], fill='#2A5784')
+        u = S * (1 - 2 * pad) / 100; o = S * pad
+        P = lambda x, y: (o + x * u, o + y * u)
+        ink = '#252B30'; w = max(2, round(2.4 * u))
+        def ln(x1, y1, x2, y2, ww=w): d.line([P(x1, y1), P(x2, y2)], fill=ink, width=ww)
+        # Haken und Aufhängung
+        hx, hy = 50, 17
+        d.ellipse([*P(hx - 2.6, hy - 2.6), *P(hx + 2.6, hy + 2.6)], outline=ink, width=max(2, round(1.8 * u)))
+        ln(50, 19.6, 50, 34)
+        # leicht geneigter Balken: Leben links schwerer
+        ang = math.radians(-5); L, R = 28, 28
+        lx, ly = 50 - L * math.cos(ang), 34 - L * math.sin(ang)
+        rx, ry = 50 + R * math.cos(ang), 34 + R * math.sin(ang)
+        pts = [P(lx + (rx - lx) * t, ly + (ry - ly) * t - 2.2 * math.sin(math.pi * t)) for t in [i / 40 for i in range(41)]]
+        d.line(pts, fill=ink, width=w, joint='curve')
+        r = 1.9 * u; d.ellipse([P(50, 34)[0] - r, P(50, 34)[1] - 2.2 * u - r, P(50, 34)[0] + r, P(50, 34)[1] - 2.2 * u + r], fill=ink)
+        # Leben: rote Scheibe
+        ln(lx, ly, lx, 56)
+        d.ellipse([*P(lx - 12.5, 56), *P(lx + 12.5, 81)], fill='#AE432C')
+        # Vorhaben: blaues Dreieck
+        ln(rx, ry, rx, 47)
+        d.polygon([P(rx, 45), P(rx + 12, 67), P(rx - 12, 67)], fill='#2A5784')
         im.resize((n, n), Image.LANCZOS).save(path)
-    icon(192, REPO + '/icon-192.png'); icon(512, REPO + '/icon-512.png', 0.08); icon(180, REPO + '/apple-touch-icon.png')
+    icon(192, REPO + '/icon-192.png', 0.08); icon(512, REPO + '/icon-512.png', 0.12); icon(180, REPO + '/apple-touch-icon.png', 0.08)
 except ImportError:
     print('PIL fehlt, Icons nicht erzeugt')
 print('Gebaut:', stamp, '·', len(page) // 1024, 'KB')
