@@ -737,13 +737,14 @@ function beamtNotes(v){const p=S.prof;if(p.beruf!=="beamt"&&!(p.lehrkraft&&p.ber
     const sp=v?ntSpitze(v):null;
     if(v&&calc(v).wochenStd>n.grenze) out.push("Dieses Vorhaben braucht im Schnitt mehr als "+n.grenze+" Stunden pro Woche von dir. Das liegt über der Regelgrenze für Nebentätigkeiten.");
     else if(sp&&sp>n.grenze) out.push("In der Saison kommst du auf bis zu etwa "+sp+" Stunden pro Woche. Die Regelgrenze sind "+n.grenze+". "+(p.land==="SN"?"In Sachsen zählt der Durchschnitt über höchstens vier Monate.":"Ob ein Durchschnitt über mehrere Wochen anerkannt wird, ist nicht geregelt. Kläre das vorher mit deiner Dienststelle."));
-    out.push("Auch in den Ferien gilt die Grenze. Ein Gericht in Mecklenburg-Vorpommern hat entschieden, dass mehr als 8 Stunden Nebentätigkeit pro Woche im Urlaub in der Regel dienstliche Interessen beeinträchtigen.");
+    out.push("Die Ferien sind kein Freibrief. Ein Gericht in Mecklenburg-Vorpommern hat entschieden, dass mehr als 8 Stunden Nebentätigkeit pro Woche im Urlaub in der Regel dienstliche Interessen beeinträchtigen. Kläre längere Einsätze in den Ferien vorher mit deiner Dienststelle.");
     out.push("Während einer Krankschreibung solltest du nicht im Vorhaben mitarbeiten. Gerichte haben das schon als Dienstvergehen gewertet.");
+    if(f.kurs) out.push("Unterrichtest du in einem Kurs selbst, kannst du als selbstständige Lehrkraft rentenversicherungspflichtig werden, sobald der Gewinn daraus über 603 Euro im Monat liegt. Das betrifft auch Beamte. Lass das von der Deutschen Rentenversicherung klären.");
   }
   if(p.lehrkraft){
     out.push("Nicht an deiner Schule: kein Verkauf, keine Werbung und keine Angebote auf dem Schulgelände, keine Nutzung von Schulmail, Räumen oder Kopierer und keine Kontaktdaten von Eltern oder Schülern.");
-    if(f.kurs) out.push("Keine bezahlten Kurse für eigene Schülerinnen und Schüler oder deren Eltern. Das kann die Unparteilichkeit berühren und ist ein typischer Grund für eine Untersagung.");
-    if(f.ausschank||f.markt) out.push("Halte Abstand zu Festen und Märkten deiner eigenen Schule, besonders beim Ausschank von Alkohol.");
+    if(f.kurs) out.push("Biete keine bezahlten Kurse für eigene Schülerinnen und Schüler oder deren Eltern an. Das kann die Unparteilichkeit berühren und ist ein typischer Grund für eine Untersagung. Kläre Angebote mit Schulbezug vorher mit dem Landesschulamt.");
+    if(f.ausschank||f.markt) out.push("Halte Abstand zu Festen und Märkten deiner eigenen Schule, besonders beim Ausschank von Alkohol. Kläre Ausnahmen vorher mit dem Landesschulamt.");
     if(p.land==="ST") out.push(NTL.ST.zeit);
   }
   return out;

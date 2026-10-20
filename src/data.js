@@ -43,21 +43,21 @@ const LAENDER = [
    ok: Wortlaut amtlich geprüft. Sonst zeigt die App "mit der Dienststelle klären". */
 const NTR = {
   BW:{m:"G",h:null,g:"§§ 62, 63 LBG BW",u:"https://www.landesrecht-bw.de/perma?j=BG_BW_!_62",x:"Bis 1.200 Euro im Jahr und innerhalb eines Fünftels der Arbeitszeit gilt eine allgemeine Genehmigung. Die Tätigkeit muss trotzdem vorher angezeigt werden.",ok:1},
-  BY:{m:"G",h:10,g:"Art. 81, 82 BayBG",u:"https://www.gesetze-bayern.de/Content/Document/BayBG-82",x:"Seit 2026 sind Nebentätigkeiten genehmigungsfrei, solange alle zusammen höchstens 10 Stunden pro Woche und 10.000 Euro im Jahr ausmachen.",ok:0},
+  BY:{m:"G",h:10,g:"Art. 81, 82 BayBG",u:"https://www.gesetze-bayern.de/Content/Document/BayBG-82",x:"Seit 2026 sind Nebentätigkeiten genehmigungsfrei, solange alle zusammen höchstens 10 Stunden pro Woche und 10.000 Euro im Jahr ausmachen.",ok:1},
   BE:{m:"G",h:null,g:"§§ 62, 63 LBG Berlin",u:"https://gesetze.berlin.de/perma?j=BG_BE_!_62",x:"Bei Lehrkräften gilt ein Fünftel der Pflichtstunden als Grenze. Eine Genehmigung gilt höchstens zwei Jahre.",ok:1},
   BB:{m:"G",h:null,g:"§§ 85 bis 88 LBG Brandenburg",u:"https://bravors.brandenburg.de/gesetze/lbg",x:"Der Antrag muss einen Monat vorher gestellt werden. Übersteigt die Vergütung 40 Prozent des jährlichen Endgrundgehalts, kann die Genehmigung versagt werden.",ok:1},
-  HB:{m:"A",h:8,g:"§§ 70 ff. BremBG",u:"https://karriere.bildung.bremen.de/sixcms/media.php/13/28_Merkblatt%20%C3%BCber%20die%20Pflichten%20der%20Beamten.pdf",x:"",ok:0},
+  HB:{m:"A",h:8,g:"§§ 70 bis 79 BremBG",u:"https://www.finanzen.bremen.de/sixcms/media.php/13/20171010_1_GA%2BNebent%25C3%25A4tigkeiten%2Bund%2B%25C3%25B6ffentlicher%2BDienst.pdf",x:"Die 8 Stunden sind eine Soll-Grenze. Für Lehrtätigkeiten nennt die Behörde 5 Wochenstunden.",ok:0},
   HH:{m:"A",h:8,g:"§§ 73, 75 HmbBG",u:"https://www.landesrecht-hamburg.de/bsha/document/jlr-NNLHH00006378NN00000000163",x:"Die Anzeige muss mindestens einen Monat vorher eingehen.",ok:1},
-  HE:{m:"G",h:8,g:"§§ 73 ff. HBG",u:"https://www.rv.hessenrecht.hessen.de/bshe/search?query=%C2%A7%2073%20HBG",x:"",ok:0},
+  HE:{m:"G",h:8,g:"§§ 73, 74 HBG",u:"https://www.rv.hessenrecht.hessen.de/bshe/search?query=%C2%A7%2073%20HBG",x:"Übersteigen die Einnahmen 30 Prozent der Jahresdienstbezüge, wird genauer geprüft. Die Ausübung eines zweiten Berufs ist ein Versagungsgrund.",ok:1},
   MV:{m:"A",h:8,g:"§§ 72, 73, 75 LBG M-V",u:"https://www.landesrecht-mv.de/bsmv/document/NJRE001263055",x:"",ok:0},
   NI:{m:"A",h:8,g:"§§ 72, 73, 75 NBG",u:"",x:"Die Anzeige muss einen Monat vorher eingehen.",ok:0},
   NW:{m:"G",h:null,g:"§§ 49, 51 LBG NRW",u:"https://lexmea.de/de/gesetz/lbg-nrw/49",x:"Gewerbliche Tätigkeiten sind ausdrücklich genehmigungspflichtig. Eine Genehmigung erlischt bei Versetzung.",ok:0},
   RP:{m:"G",h:8,g:"§§ 82 bis 86 LBG RP",u:"https://mdi.rlp.de/fileadmin/03/Themen/Buerger_und_Staat/Dokumente/Merkblatt_Nebentaetigkeiten_Beamte.pdf",x:"Übersteigt die Vergütung 40 Prozent des jährlichen Endgrundgehalts, kann die Genehmigung versagt werden.",ok:0},
   SL:{m:"A",h:null,g:"§§ 84 bis 90 SBG",u:"https://recht.saarland.de/bssl/search?query=SBG%20Nebent%C3%A4tigkeit",x:"",ok:0},
-  SN:{m:"A",h:null,g:"§§ 103 bis 106 SächsBG",u:"https://www.revosax.sachsen.de/vorschrift/13871",x:"Die Zeitgrenze von einem Fünftel gilt im Durchschnitt von höchstens vier Monaten. Saisonspitzen lassen sich so ausgleichen.",ok:1},
+  SN:{m:"A",h:null,g:"§§ 103 bis 106 SächsBG",u:"https://www.revosax.sachsen.de/vorschrift/13871",x:"Die Zeitgrenze von einem Fünftel gilt im Durchschnitt von höchstens vier Monaten. Saisonspitzen lassen sich so ausgleichen. Seit August 2026 gilt eine neue Fassung des Gesetzes, die hier noch nicht geprüft ist.",ok:0},
   ST:{m:"A",h:8,g:"§§ 73 bis 78 LBG LSA",u:"https://www.landesrecht.sachsen-anhalt.de/bsst/document/jlr-NNLST00004163",x:"Es gibt keine Einkommensgrenze und keine gesetzliche Frist. Die Anzeige muss aber rechtzeitig vor Beginn vorliegen, jede Änderung meldest du unverzüglich nach.",ok:1},
   SH:{m:"A",h:8,g:"§§ 72, 73, 75 LBG SH",u:"https://www.gesetze-rechtsprechung.sh.juris.de/bssh/search?query=%C2%A7%2073%20LBG",x:"",ok:0},
-  TH:{m:"G",h:8,g:"§§ 51, 52 ThürBG",u:"https://landesrecht.thueringen.de/perma?j=BG_TH_!_51",x:"Seit 2026 brauchen nur noch entgeltliche Tätigkeiten eine Genehmigung. Die 8 Stunden gelten auch bei Teilzeit.",ok:1}
+  TH:{m:"G",h:8,g:"§§ 51, 52 ThürBG",u:"https://landesrecht.thueringen.de/perma?j=BG_TH_!_51",x:"Seit 2026 brauchen entgeltliche Tätigkeiten eine Genehmigung, ein Gewerbe auch unentgeltlich. Die Zeitgrenze ist hier noch nicht amtlich geprüft.",ok:0}
 };
 /* Zusätzliche Regeln für Lehrkräfte, bisher nur für Sachsen-Anhalt belegt */
 const NTL = {
@@ -66,7 +66,7 @@ const NTL = {
       formName:"Anzeige einer Nebentätigkeit im Schulbereich (LSchA-33-05)",
       erlass:"Runderlass des Kultusministeriums vom 16.09.2013, Nr. 18",
       erlassU:"https://www.landesrecht.sachsen-anhalt.de/bsst/document/VVST-VVST000006924",
-      zeit:"Laut Erlass sind Nebentätigkeiten grundsätzlich nur außerhalb der Unterrichtszeit nach 14 Uhr zulässig, an Ganztagsschulen auch später. Weicht deine Zeit davon ab, braucht es eine Stellungnahme der Schulleitung."}
+      zeit:"Laut Erlass und Formular sind Nebentätigkeiten grundsätzlich nur außerhalb der Unterrichtszeit nach 14 Uhr zulässig, an Ganztagsschulen auch später. Weicht deine Zeit davon ab, braucht es eine Stellungnahme der Schulleitung. Kläre im Zweifel mit dem Landesschulamt, ob der Erlass noch so gilt."}
 };
 
 /* Hauptberuf: bestimmt, was vor dem Start mit dem Hauptberuf zu klären ist */
@@ -289,7 +289,7 @@ const PFLICHTEN = [
    wie:"Wie die Anmeldung, im Serviceportal deines Landes."},
   {id:"ntende", w:"exit", wer:"{ntWer}", t:"Ende der Nebentätigkeit melden",
    wenn:(p)=>p.beruf==="beamt"||(p.beruf==="oed"&&p.lehrkraft&&p.land==="ST"),
-   x:"Mit der Übergabe endet deine Nebentätigkeit für dieses Vorhaben. Das meldest du deiner Dienststelle. Behältst du eine rein stille Beteiligung ohne Mitarbeit, ist das in der Regel Verwaltung eigenen Vermögens und nicht anzeigepflichtig. Sobald du mitarbeitest, berätst oder mitbestimmst, ist es wieder eine Nebentätigkeit.",
+   x:"Mit der Übergabe endet deine Nebentätigkeit für dieses Vorhaben. Das meldest du deiner Dienststelle. Eine kleine, rein passive Beteiligung ohne Mitarbeit gilt meist als Verwaltung eigenen Vermögens und ist dann nicht anzeigepflichtig. Behältst du einen großen Anteil, Einfluss oder arbeitest mit, ist es wieder eine Nebentätigkeit. Im Zweifel zeig die Beteiligung vorsorglich an und kläre sie mit deiner Dienststelle.",
    wie:"Kurze schriftliche Mitteilung mit Datum der Übergabe."},
   {id:"vg", w:"exit", wer:"Finanzamt", t:"Verkaufserlös in der Steuererklärung angeben",
    wenn:()=>true,
@@ -391,7 +391,7 @@ const WISSEN = [
    c:"Das Team muss vorher informiert werden und kann widersprechen.",
    src:"§ 613a BGB", u:"https://www.gesetze-im-internet.de/bgb/__613a.html", ev:3},
   {id:"w10",bereich:"geld",t:"Nebentätigkeit als Beamtin oder Beamter",
-   x:"Jede Nebentätigkeit gegen Geld muss der Dienstherr kennen. Je nach Land wird sie angezeigt oder genehmigt. Ein eigenes Gewerbe gehört immer dazu, auch wenn andere den Alltag führen. Frei ist die Verwaltung eigenen Vermögens, also etwa eine vermietete Wohnung, ETF oder eine rein stille Beteiligung. In den meisten Ländern gilt als Regelgrenze ein Fünftel der Arbeitszeit, also etwa 8 Stunden pro Woche für alle Nebentätigkeiten zusammen.",
+   x:"Jede Nebentätigkeit gegen Geld muss der Dienstherr kennen. Je nach Land wird sie angezeigt oder genehmigt. Ein eigenes Gewerbe gehört immer dazu, auch wenn andere den Alltag führen. Frei ist die Verwaltung eigenen Vermögens, also etwa eine vermietete Wohnung, ETF oder eine kleine, rein passive Beteiligung. In den meisten Ländern gilt als Regelgrenze ein Fünftel der Arbeitszeit, also etwa 8 Stunden pro Woche für alle Nebentätigkeiten zusammen.",
    c:"Wer eine anzeigepflichtige Tätigkeit verschweigt, begeht ein Dienstvergehen. Die Folgen reichen bis zur Zurückstufung.",
    src:"§ 40 BeamtStG und Landesbeamtengesetze", u:"https://www.gesetze-im-internet.de/beamtstg/__40.html", ev:3},
   {id:"w9",bereich:"sinn",t:"Mehr Geld, wenig mehr Glück?",
