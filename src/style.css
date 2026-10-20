@@ -289,3 +289,8 @@ details.more[open]>summary::after,details.phase[open]>summary::after{transform:r
 details.more>.grid2{padding-bottom:14px}
 .sheet .sbody{grid-auto-rows:max-content}
 .hint{font:400 13px/1.4 var(--f-ui);color:var(--faint);margin:0}
+.opt{--fr:0%;position:relative;overflow:hidden;display:grid;gap:4px;text-align:left;width:100%;padding:12px 14px;border-radius:var(--r);border:1.5px solid var(--line);background:var(--s1);cursor:pointer;color:var(--ink)}
+.opt .ot{font:650 16px/1.3 var(--f-ui);display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.opt .ox{font:400 14px/1.45 var(--f-ui);color:var(--muted)}
+.opt[aria-pressed="true"]{border-color:var(--neben);background:var(--wash-neben)}
+.opt[aria-pressed="true"] .ot::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--neben);flex:none}

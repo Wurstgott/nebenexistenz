@@ -533,7 +533,7 @@ const SHEETS={
     ${p.schuld?`<div class="field"><label for="f-sd">Offener Betrag</label><div class="suffix"><input id="f-sd" type="text" inputmode="decimal" data-num="1" data-bind="prof.schulden" value="${p.schulden?dz(p.schulden):""}"><span>€</span></div><span class="hint">Ratenkredite, Kreditkarte, Dispo. Nicht die Immobilie.</span></div>`:""}
     <div class="field"><span class="lab">An welchen Tagen darf es um die Vorhaben gehen?</span><div class="chips">${[1,2,3,4,5,6,0].map(d=>`<button class="chip" data-a="tag" data-id="${d}" data-key="ptag${d}" aria-pressed="${p.tage.includes(d)}">${WT[d]}</button>`).join("")}</div><span class="hint">An allen anderen Tagen schlägt die App nur Schritte für dein Leben vor. Heute zählt einmalig als Vorhabentag.</span></div>
     <div class="field"><span class="lab">Wie viele Stunden pro Woche, für alle Vorhaben zusammen?</span><div class="chips">${[1,2,3,4,6,8].map(h=>`<button class="chip" data-a="std" data-id="${h}" data-key="pstd${h}" aria-pressed="${p.stunden==h}">${h}</button>`).join("")}</div></div>
-    <div class="field"><span class="lab">Umsatzsteuer</span><div class="chips"><button class="chip" data-a="ust" data-id="0" data-key="ust0" aria-pressed="${!p.ust}">Kleinunternehmer</button><button class="chip" data-a="ust" data-id="1" data-key="ust1" aria-pressed="${!!p.ust}">Mit Umsatzsteuer</button></div><span class="hint">Als Kleinunternehmer berechnest du keine Umsatzsteuer, solange der Umsatz aller Vorhaben unter ${RECHT.kuVorjahr.toLocaleString("de-DE")} € bleibt. Mit Umsatzsteuer rechnet die App deine Preise als Bruttopreise.</span></div>
+    ${ustBlock()}
     <div id="rahmenOut">${rahmenOut()}</div>
     <button class="btn wide" data-a="profilSave">Speichern</button>`},
 
@@ -666,6 +666,20 @@ const MOMENTE={
   traegt:{t:"Es trägt sich.",x:"Drei Läufe mit Gewinn, kaum eigene Zeit, und einer ganz ohne dich. Das ist eine Nebenexistenz im eigentlichen Sinn. Jetzt kannst du überlegen, es weiterzugeben."},
   exit:{t:"Weitergegeben.",x:"Das Vorhaben gehört jetzt jemand anderem. Im Bild ruht es unten auf dem Boden, es verschwindet nicht."}
 };
+function ustEmpf(){
+  const ju=jahresUmsatzAlle(), start=aktive().reduce((a,v)=>a+n0(v.calc.start),0), firmen=aktive().some(v=>tplOf(v).f.kommission);
+  if(ju>RECHT.kuVorjahr) return{k:"regel",t:"Deine Vorhaben kommen zusammen auf etwa "+eur(ju)+" Umsatz im Jahr. Das liegt über "+RECHT.kuVorjahr.toLocaleString("de-DE")+" €. Ab dem Folgejahr bist du dann ohnehin umsatzsteuerpflichtig."};
+  if(start>10000) return{k:"klein",t:"Deine Vorhaben bleiben unter der Grenze. Bei Startkosten von etwa "+eur(start)+" kann sich die Regelbesteuerung trotzdem lohnen, weil du die Umsatzsteuer auf diese Käufe zurückbekommst. Das sollte eine Steuerberatung durchrechnen."};
+  return{k:"klein",t:aktive().length?"Deine Vorhaben kommen zusammen auf etwa "+eur(ju)+" Umsatz im Jahr und bleiben unter der Grenze. Du verkaufst an Privatleute"+(firmen?" oder über Läden":"")+", da ist die Kleinunternehmerregelung meist die einfachere und günstigere Wahl.":"Für kleine Vorhaben, die an Privatleute verkaufen, ist das fast immer die einfachere und günstigere Wahl. Sobald du Vorhaben angelegt hast, prüft die App das hier für dich."};
+}
+function ustBlock(){const p=S.prof,e=ustEmpf(),cur=p.ust?"regel":"klein";
+  const O=(k,t,x)=>`<button class="opt" data-a="ust" data-id="${k==="regel"?1:0}" data-key="ust${k}" aria-pressed="${cur===k}"><span class="ot">${t}${e.k===k?` <span class="pill ok">passt zu dir</span>`:""}</span><span class="ox">${x}</span></button>`;
+  return`<div class="field"><span class="lab">Wie gehst du mit der Umsatzsteuer um?</span>
+  <p class="hint">Das entscheidest du im Fragebogen beim Finanzamt. Die App rechnet danach deine Preise.</p>
+  <div class="stack">${O("klein","Kleinunternehmer","Keine Umsatzsteuer auf deinen Preisen und keine Voranmeldungen. Deine Preise sind Endpreise. Dafür bekommst du die Umsatzsteuer auf deine Einkäufe nicht zurück. Möglich, solange alle Vorhaben zusammen im Vorjahr unter "+RECHT.kuVorjahr.toLocaleString("de-DE")+" € und im laufenden Jahr unter "+RECHT.kuLaufend.toLocaleString("de-DE")+" € Umsatz bleiben.")}
+  ${O("regel","Mit Umsatzsteuer","In deinen Preisen stecken 19 Prozent Umsatzsteuer, bei vielen Lebensmitteln 7 Prozent. Die führst du ans Finanzamt ab, meist mit einer Voranmeldung über ELSTER jeden Monat oder jedes Quartal. Dafür bekommst du die Umsatzsteuer auf deine Einkäufe zurück. Wer das freiwillig wählt, ist fünf Jahre daran gebunden.")}</div>
+  <p class="hint"><strong>Empfehlung:</strong> ${esc(e.t)}</p></div>`;
+}
 function rahmenOut(){const r=rahmen(),p=S.prof;
   if(!r.gesetzt) return`<p class="muted small">Sobald du Zahlen einträgst, zeigt die App, wie viel Geld du einsetzen kannst.</p>`;
   const ng=[r.mon+" Monate Ausgaben",r.immoPuffer?"3 Kaltmieten":"",r.defizit?"6 Monate Fehlbetrag":""].filter(Boolean).join(", ");
@@ -849,7 +863,7 @@ function live(m){const l=$("#live");l.textContent="";setTimeout(()=>{l.textConte
 
 /* ---------- Haptik und Klickfamilien ---------- */
 const IOS=/iP(hone|ad|od)/.test(navigator.userAgent)||(navigator.platform==="MacIntel"&&navigator.maxTouchPoints>1);
-const HAPSEL=".btn,.chip,.check,.person,.card,.logo,.closebtn,.iconbtn,.fig";
+const HAPSEL=".btn,.chip,.opt,.check,.person,.card,.logo,.closebtn,.iconbtn,.fig";
 const PAT={sel:10,act:12,ok:[10,60,14],err:[24,60,24]};
 const vibOn=()=>S.settings.vib!==false;
 function buzz(k){ if(!vibOn()||IOS) return; try{navigator.vibrate&&navigator.vibrate(PAT[k])}catch(e){} }
@@ -880,7 +894,7 @@ document.addEventListener("click",e=>{
   const hap=e.target.classList&&e.target.closest&&e.target.closest("label.hap"); if(hap&&e.target.tagName==="INPUT") e.target.blur();
   const el=e.target.closest&&e.target.closest("[data-a]"); if(!el||el.disabled) return;
   const a=el.dataset.a, d=el.dataset;
-  if(el.classList.contains("chip")||el.classList.contains("check")||el.classList.contains("person")){lastSel={key:d.key||"",x:e.clientX,y:e.clientY,t:performance.now()};buzz("sel")} else buzz("act");
+  if(el.classList.contains("chip")||el.classList.contains("opt")||el.classList.contains("check")||el.classList.contains("person")){lastSel={key:d.key||"",x:e.clientX,y:e.clientY,t:performance.now()};buzz("sel")} else buzz("act");
   const H=ACT[a]; if(H){ if(el.tagName==="A"&&a!=="claudeGo") e.preventDefault(); H(d,el,e) }
 });
 document.addEventListener("keydown",e=>{
