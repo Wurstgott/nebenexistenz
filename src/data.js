@@ -37,6 +37,38 @@ const LAENDER = [
   {id:"TH",n:"Thüringen",ft:["Fronleichnam (einzelne Gemeinden)","Weltkindertag (20.9.)","Reformationstag (31.10.)"]}
 ];
 
+/* Nebentätigkeitsrecht für Beamtinnen und Beamte je Land.
+   m: "A" = Anzeige mit Verbotsvorbehalt, "G" = Genehmigung vor Aufnahme.
+   h: Regelgrenze in Stunden pro Woche für alle Nebentätigkeiten (null = Fünftel der Arbeitszeit ohne feste Zahl).
+   ok: Wortlaut amtlich geprüft. Sonst zeigt die App "mit der Dienststelle klären". */
+const NTR = {
+  BW:{m:"G",h:null,g:"§§ 62, 63 LBG BW",u:"https://www.landesrecht-bw.de/perma?j=BG_BW_!_62",x:"Bis 1.200 Euro im Jahr und innerhalb eines Fünftels der Arbeitszeit gilt eine allgemeine Genehmigung. Die Tätigkeit muss trotzdem vorher angezeigt werden.",ok:1},
+  BY:{m:"G",h:10,g:"Art. 81, 82 BayBG",u:"https://www.gesetze-bayern.de/Content/Document/BayBG-82",x:"Seit 2026 sind Nebentätigkeiten genehmigungsfrei, solange alle zusammen höchstens 10 Stunden pro Woche und 10.000 Euro im Jahr ausmachen.",ok:0},
+  BE:{m:"G",h:null,g:"§§ 62, 63 LBG Berlin",u:"https://gesetze.berlin.de/perma?j=BG_BE_!_62",x:"Bei Lehrkräften gilt ein Fünftel der Pflichtstunden als Grenze. Eine Genehmigung gilt höchstens zwei Jahre.",ok:1},
+  BB:{m:"G",h:null,g:"§§ 85 bis 88 LBG Brandenburg",u:"https://bravors.brandenburg.de/gesetze/lbg",x:"Der Antrag muss einen Monat vorher gestellt werden. Übersteigt die Vergütung 40 Prozent des jährlichen Endgrundgehalts, kann die Genehmigung versagt werden.",ok:1},
+  HB:{m:"A",h:8,g:"§§ 70 ff. BremBG",u:"https://karriere.bildung.bremen.de/sixcms/media.php/13/28_Merkblatt%20%C3%BCber%20die%20Pflichten%20der%20Beamten.pdf",x:"",ok:0},
+  HH:{m:"A",h:8,g:"§§ 73, 75 HmbBG",u:"https://www.landesrecht-hamburg.de/bsha/document/jlr-NNLHH00006378NN00000000163",x:"Die Anzeige muss mindestens einen Monat vorher eingehen.",ok:1},
+  HE:{m:"G",h:8,g:"§§ 73 ff. HBG",u:"https://www.rv.hessenrecht.hessen.de/bshe/search?query=%C2%A7%2073%20HBG",x:"",ok:0},
+  MV:{m:"A",h:8,g:"§§ 72, 73, 75 LBG M-V",u:"https://www.landesrecht-mv.de/bsmv/document/NJRE001263055",x:"",ok:0},
+  NI:{m:"A",h:8,g:"§§ 72, 73, 75 NBG",u:"",x:"Die Anzeige muss einen Monat vorher eingehen.",ok:0},
+  NW:{m:"G",h:null,g:"§§ 49, 51 LBG NRW",u:"https://lexmea.de/de/gesetz/lbg-nrw/49",x:"Gewerbliche Tätigkeiten sind ausdrücklich genehmigungspflichtig. Eine Genehmigung erlischt bei Versetzung.",ok:0},
+  RP:{m:"G",h:8,g:"§§ 82 bis 86 LBG RP",u:"https://mdi.rlp.de/fileadmin/03/Themen/Buerger_und_Staat/Dokumente/Merkblatt_Nebentaetigkeiten_Beamte.pdf",x:"Übersteigt die Vergütung 40 Prozent des jährlichen Endgrundgehalts, kann die Genehmigung versagt werden.",ok:0},
+  SL:{m:"A",h:null,g:"§§ 84 bis 90 SBG",u:"https://recht.saarland.de/bssl/search?query=SBG%20Nebent%C3%A4tigkeit",x:"",ok:0},
+  SN:{m:"A",h:null,g:"§§ 103 bis 106 SächsBG",u:"https://www.revosax.sachsen.de/vorschrift/13871",x:"Die Zeitgrenze von einem Fünftel gilt im Durchschnitt von höchstens vier Monaten. Saisonspitzen lassen sich so ausgleichen.",ok:1},
+  ST:{m:"A",h:8,g:"§§ 73 bis 78 LBG LSA",u:"https://www.landesrecht.sachsen-anhalt.de/bsst/document/jlr-NNLST00004163",x:"Es gibt keine Einkommensgrenze und keine gesetzliche Frist. Die Anzeige muss aber rechtzeitig vor Beginn vorliegen, jede Änderung meldest du unverzüglich nach.",ok:1},
+  SH:{m:"A",h:8,g:"§§ 72, 73, 75 LBG SH",u:"https://www.gesetze-rechtsprechung.sh.juris.de/bssh/search?query=%C2%A7%2073%20LBG",x:"",ok:0},
+  TH:{m:"G",h:8,g:"§§ 51, 52 ThürBG",u:"https://landesrecht.thueringen.de/perma?j=BG_TH_!_51",x:"Seit 2026 brauchen nur noch entgeltliche Tätigkeiten eine Genehmigung. Die 8 Stunden gelten auch bei Teilzeit.",ok:1}
+};
+/* Zusätzliche Regeln für Lehrkräfte, bisher nur für Sachsen-Anhalt belegt */
+const NTL = {
+  ST:{stelle:"Landesschulamt, auf dem Dienstweg über deine Schulleitung",
+      form:"https://landesschulamt.sachsen-anhalt.de/service/formulare-fuer-oeffentliche-schulen",
+      formName:"Anzeige einer Nebentätigkeit im Schulbereich (LSchA-33-05)",
+      erlass:"Runderlass des Kultusministeriums vom 16.09.2013, Nr. 18",
+      erlassU:"https://www.landesrecht.sachsen-anhalt.de/bsst/document/VVST-VVST000006924",
+      zeit:"Laut Erlass sind Nebentätigkeiten grundsätzlich nur außerhalb der Unterrichtszeit nach 14 Uhr zulässig, an Ganztagsschulen auch später. Weicht deine Zeit davon ab, braucht es eine Stellungnahme der Schulleitung."}
+};
+
 /* Hauptberuf: bestimmt, was vor dem Start mit dem Hauptberuf zu klären ist */
 const BERUFE = [
   {id:"ang",n:"Angestellt"},
@@ -138,11 +170,15 @@ const PFLICHTEN = [
   {id:"oed", w:"vor", wer:"Personalstelle", t:"Nebentätigkeit schriftlich anzeigen",
    wenn:(p)=>p.beruf==="oed",
    x:"Im öffentlichen Dienst musst du jede Nebentätigkeit gegen Geld vorher schriftlich anzeigen (§ 3 Abs. 4 TV-L, für Bund und Kommunen § 3 Abs. 3 TVöD). Untersagen darf der Arbeitgeber sie nur, wenn sie deine Arbeit oder seine Interessen beeinträchtigt.",
-   wie:"Die Anzeige geht an die Personalstelle deines Arbeitgebers, bei Lehrkräften meist über die Schulleitung an die zuständige Landesbehörde. Eine kurze schriftliche Mail oder ein Formular genügt oft, frag nach, welche Form verlangt wird.", auftrag:"a_ag"},
+   wie:"{oedWie}", auftrag:"a_ag", form:"nt"},
   {id:"beamt", w:"vor", wer:"Dienstherr", t:"Nebentätigkeit genehmigen lassen",
-   wenn:(p)=>p.beruf==="beamt",
-   x:"Beamtinnen und Beamte brauchen für die meisten gewerblichen Nebentätigkeiten eine Genehmigung. Die Regeln stehen im Beamtengesetz deines Landes ({land}).",
-   wie:"Antrag über die Personalstelle stellen, mit Tätigkeit, Zeitumfang und erwarteter Vergütung. Erst nach der Genehmigung anfangen."},
+   wenn:(p)=>p.beruf==="beamt"&&(NTR[p.land]||{}).m!=="A",
+   x:"In {land} braucht ein eigenes Gewerbe als Nebentätigkeit eine Genehmigung vor Beginn ({ntG}). Das gilt auch, wenn andere den Alltag führen, denn du bleibst Inhaber. {ntGrenze} {ntX}",
+   wie:"Schriftlich über deine Dienststelle beantragen, mit Art der Tätigkeit, Stunden pro Woche einschließlich Organisation und erwarteter Vergütung. Erst nach der Genehmigung anfangen. Die vorbereiteten Angaben stehen unter „Formularwerte“.", form:"nt", link:"{ntU}"},
+  {id:"beamtA", w:"vor", wer:"{ntWer}", t:"Nebentätigkeit schriftlich anzeigen",
+   wenn:(p)=>p.beruf==="beamt"&&(NTR[p.land]||{}).m==="A",
+   x:"In {land} ist ein eigenes Gewerbe als Nebentätigkeit anzeigepflichtig ({ntG}). Eine Genehmigung brauchst du nicht, aber der Dienstherr kann die Tätigkeit untersagen, wenn sie dienstliche Interessen beeinträchtigt. Das gilt auch, wenn andere den Alltag führen, denn du bleibst Inhaber. {ntGrenze} {ntX}",
+   wie:"{ntWie}", form:"nt", link:"{ntU}"},
   {id:"kv", w:"vor", wer:"Krankenkasse", t:"Krankenversicherung klären",
    wenn:(p)=>p.beruf==="stud"||p.beruf==="ohne",
    x:"Wer familienversichert ist oder als Student versichert ist, kann diesen Status verlieren, wenn der Gewinn eine Grenze übersteigt oder die Tätigkeit zu groß wird.",
@@ -211,6 +247,10 @@ const PFLICHTEN = [
    wenn:(p,f)=>!!f.kommission,
    x:"Die Ware bleibt dein Eigentum, bis sie verkauft ist. Eine kurze schriftliche Vereinbarung regelt Provision, Abrechnung, Rückgabe und wer bei Diebstahl oder Schaden haftet.",
    wie:"Mit dem Auftrag „Kommissionsvereinbarung entwerfen“ einen Entwurf machen und je Laden eine Lieferliste mit Stückzahl und Datum führen.", auftrag:"a_komm"},
+  {id:"ntaend", w:"laufend", wer:"{ntWer}", t:"Änderungen der Nebentätigkeit melden",
+   wenn:(p)=>p.beruf==="beamt"||(p.beruf==="oed"&&p.lehrkraft&&p.land==="ST"),
+   x:"Ändert sich etwas Wesentliches, meldest du das unverzüglich nach: mehr Stunden, ein neues Vorhaben, Personal, ein neuer Standort oder deutlich höhere Einnahmen. Jedes neue Vorhaben ist eine eigene Nebentätigkeit.",
+   wie:"Am einfachsten mit derselben Anzeige wie beim Start, mit dem Vermerk „Änderung“."},
   {id:"bnr", w:"team", wer:"Bundesagentur für Arbeit", t:"Betriebsnummer beantragen",
    wenn:(p,f)=>!!f.team,
    x:"Bevor du jemanden beschäftigst, brauchst du eine Betriebsnummer. Sie ist kostenlos.",
@@ -247,6 +287,10 @@ const PFLICHTEN = [
    wenn:(p,f)=>!f.kurs,
    x:"Nach der Übergabe meldest du das Gewerbe ab, wenn du keine anderen Vorhaben darunter führst. Die neue Person meldet ihr eigenes Gewerbe an.",
    wie:"Wie die Anmeldung, im Serviceportal deines Landes."},
+  {id:"ntende", w:"exit", wer:"{ntWer}", t:"Ende der Nebentätigkeit melden",
+   wenn:(p)=>p.beruf==="beamt"||(p.beruf==="oed"&&p.lehrkraft&&p.land==="ST"),
+   x:"Mit der Übergabe endet deine Nebentätigkeit für dieses Vorhaben. Das meldest du deiner Dienststelle. Behältst du eine rein stille Beteiligung ohne Mitarbeit, ist das in der Regel Verwaltung eigenen Vermögens und nicht anzeigepflichtig. Sobald du mitarbeitest, berätst oder mitbestimmst, ist es wieder eine Nebentätigkeit.",
+   wie:"Kurze schriftliche Mitteilung mit Datum der Übergabe."},
   {id:"vg", w:"exit", wer:"Finanzamt", t:"Verkaufserlös in der Steuererklärung angeben",
    wenn:()=>true,
    x:"Kaufpreis minus Kosten des Verkaufs minus Buchwert ergibt den Veräußerungsgewinn. Er gehört in die Steuererklärung des Jahres. Umsatzsteuer fällt meist nicht an, weil der ganze Betrieb übergeht.",
@@ -306,6 +350,8 @@ const AUFTRAEGE = [
    p:"Ich möchte mein Vorhaben „{name}“ ({vorlage}) an die Person verkaufen, die es bisher für mich führt. Kennzahlen: {rechnung}. Bisherige Läufe: {laeufe}. Preisvorstellung: {preis}. Bereite vor: einen Gesprächsleitfaden, einen fairen Ratenplan (zum Beispiel 30 Prozent Anzahlung, Rest in 12 bis 24 Monatsraten, Eigentumsvorbehalt am Inventar), was ich in einer Übergangssaison an Begleitung anbiete, und ein Starterpaket mit den Pflichtschritten, die die neue Inhaberin selbst erledigen muss."},
   {id:"a_ruecklage", t:"Steuerrücklage berechnen", out:"pass",
    p:"Ich bin {beruf}{immo} und habe nebenher ein Gewerbe „{name}“. Rahmen: {rechnung}. Erkläre grob, wie viel Einkommensteuer auf den Gewinn zusätzlich anfällt, wie die Nachzahlung und die Vorauszahlungen nach der ersten Steuererklärung ablaufen, und wie viel ich pro Monat zurücklegen sollte. Nenne die Annahmen, die du triffst."},
+  {id:"a_nt", t:"Nebentätigkeit anzeigen: Anschreiben", out:"amt", nur:(p)=>p.beruf==="beamt"||p.beruf==="oed",
+   p:"Formuliere ein kurzes, sachliches Anschreiben, mit dem ich als {beruf}e Person in {land} meinem Dienstherrn eine Nebentätigkeit {ntVerb}: Ich betreibe nebenberuflich als Inhaber das Kleingewerbe „{name}“ ({taetig}). Worum es geht: {desc} Den Alltag führen andere, ich übernehme Planung, Einkauf, Absprachen und Abrechnung, im Durchschnitt etwa {std} Stunden pro Woche außerhalb der Dienstzeit. Rahmen: {rechnung}. Begründe kurz, warum keine dienstlichen Interessen berührt sind (kein Bezug zu meiner Dienststelle, keine Nutzung dienstlicher Mittel, Einhaltung der Zeitgrenze). Rechtsgrundlage: {ntG}. Kein Pathos, keine Bitte um Erlaubnis, wenn nur eine Anzeige nötig ist."},
   {id:"a_liefer", t:"Lieferanten anfragen", out:"prod",
    p:"Ich brauche für mein Vorhaben „{name}“ ({desc}) Material oder Ware in kleinen Mengen. Rahmen: {rechnung}. Finde 5 bis 8 Lieferanten in Deutschland, möglichst regional und nachhaltig, mit Mindestmengen und ungefähren Preisen. Schreib dazu eine kurze Anfrage, die ich an alle schicken kann."}
 ];
@@ -344,6 +390,10 @@ const WISSEN = [
    x:"Wird ein Betrieb an jemand anderen übertragen, gehen die Arbeitsverhältnisse in der Regel auf die neue Inhaberin über. Das schützt dein Team bei einer Übergabe.",
    c:"Das Team muss vorher informiert werden und kann widersprechen.",
    src:"§ 613a BGB", u:"https://www.gesetze-im-internet.de/bgb/__613a.html", ev:3},
+  {id:"w10",bereich:"geld",t:"Nebentätigkeit als Beamtin oder Beamter",
+   x:"Jede Nebentätigkeit gegen Geld muss der Dienstherr kennen. Je nach Land wird sie angezeigt oder genehmigt. Ein eigenes Gewerbe gehört immer dazu, auch wenn andere den Alltag führen. Frei ist die Verwaltung eigenen Vermögens, also etwa eine vermietete Wohnung, ETF oder eine rein stille Beteiligung. In den meisten Ländern gilt als Regelgrenze ein Fünftel der Arbeitszeit, also etwa 8 Stunden pro Woche für alle Nebentätigkeiten zusammen.",
+   c:"Wer eine anzeigepflichtige Tätigkeit verschweigt, begeht ein Dienstvergehen. Die Folgen reichen bis zur Zurückstufung.",
+   src:"§ 40 BeamtStG und Landesbeamtengesetze", u:"https://www.gesetze-im-internet.de/beamtstg/__40.html", ev:3},
   {id:"w9",bereich:"sinn",t:"Mehr Geld, wenig mehr Glück?",
    x:"Eine große Studie mit Tageserhebungen fand, dass das Wohlbefinden für die meisten Menschen mit dem Einkommen weiter steigt, auch über 75.000 Dollar. Für eine unglückliche Minderheit flachte die Kurve aber ab.",
    c:"Die Zuwächse werden mit jedem Euro kleiner. Wer schon genug hat, gewinnt mehr durch Zeit und Beziehungen.",

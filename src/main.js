@@ -1,7 +1,7 @@
 /* ===== Nebenexistenz · Logik ===== */
 const BUILD="__BUILD__";
 const KEY="nebenexistenz-v1";
-const GV=4;
+const GV=5;
 const MAX_AKTIV=3;
 const IN_FRAME=(()=>{try{return window.self!==window.top}catch(e){return true}})();
 
@@ -27,6 +27,7 @@ function migrate(){
   S.ventures.forEach(v=>{ v.duties=v.duties||{}; v.team=v.team||[]; v.runs=v.runs||[]; v.results=v.results||[]; v.werte=v.werte||{}; v.bio=v.bio||{}; v.calc=Object.assign({},(tplOf(v)||{}).calc||{},v.calc||{}) });
   if((S.gv||1)<2){S.ventures.forEach(v=>{S.lv[v.id]=stage(v);v.pending=v.pending||{}});S.fresh=[]}
   if((S.gv||1)<4){const p=S.prof;if(n0(p.wp)||n0(p.verplant))p.weiteres=true;delete p.krypto;delete p.immoRate}
+  if((S.gv||1)<5){["oed","beamt"].forEach(k=>{if(S.pduties[k]){S.ventures.forEach(v=>{v.duties[k]=v.duties[k]||S.pduties[k];if(k==="beamt")v.duties.beamtA=v.duties.beamtA||S.pduties[k]});delete S.pduties[k]}})}
   const ap=S.settings.apps||{};
   if(ap.wg==="https://wurstgott.github.io/wertegeruest/") ap.wg="https://wurstgott.github.io/fernweh/wertegeruest/";
   if(ap.gk==="https://wurstgott.github.io/glueckskompass/") ap.gk="https://wurstgott.github.io/fernweh/glueckskompass/";
@@ -113,7 +114,7 @@ function dutiesFor(v){
   const f=(tplOf(v)||{}).f||{};
   return PFLICHTEN.filter(d=>{try{return d.wenn(S.prof,f)}catch(e){return false}});
 }
-const PERSON=new Set(["ag","oed","beamt","kv","fse","ku","euer","ihk","kasse","bg"]);
+const PERSON=new Set(["ag","kv","fse","ku","euer","ihk","kasse","bg"]);
 function dutyDone(v,d){return PERSON.has(d.id)?!!S.pduties[d.id]:!!(v.duties||{})[d.id]}
 function traegt(v){
   if(v.runs.length<3) return false;
@@ -185,8 +186,8 @@ function ventureStep(v){
     case"pass": return{...B,t:"Rechnung für „"+v.name+"“ prüfen",x:"Trag Preis, Kosten und Stückzahl ein. Die App zeigt dir, ob es sich trägt und ob das nötige Geld zu deinem Rahmen passt.",btns:[{l:"Zur Rechnung",a:"venture",id:v.id,sub:"rechnung"},{l:"Preise vergleichen lassen",a:"auftrag",id:v.id,task:"a_preis",c:"ghost"}]};
     case"prod": return{...B,t:"Konzept für „"+v.name+"“ ausarbeiten lassen",x:"Lass Claude drei Varianten mit Stückkosten und Kennzeichnungspflichten ausarbeiten. Mit Konzept, Fotos und Muster kannst du dich danach um Stand oder Laden bewerben.",btns:[{l:"Claude beauftragen",a:"auftrag",id:v.id,task:"a_konzept"},{l:"Selbst eintragen",a:"venture",id:v.id,sub:"auftraege",c:"ghost"}]};
     case"amt":{const open=dutiesFor(v).filter(d=>d.w==="vor"&&!dutyDone(v,d)), d=open.find(d=>!isPending(v,d));
-      if(!d){const w=open.map(d=>d.wer);return{...B,t:"Warten auf "+[...new Set(w)].join(", "),x:"Du hast alles beantragt. Bis die Antwort kommt, gibt es für „"+v.name+"“ nichts zu tun.",btns:[{l:"Pflichten ansehen",a:"venture",id:v.id,sub:"pflichten",c:"ghost"},{l:"Zum Leben",a:"tab",id:"leben",c:"leben"}]}}
-      return{...B,t:d.t,x:fill(d.x,v).split(". ")[0]+".",btns:[{l:"Ansehen",a:"venture",id:v.id,sub:"pflichten"},...(d.auftrag?[{l:"Claude beauftragen",a:"auftrag",id:v.id,task:d.auftrag,c:"ghost"}]:NOASK.has(d.wer)?[]:[{l:"Anfrage vorbereiten",a:"auftrag",id:v.id,task:"a_anfrage",duty:d.id,c:"ghost"}])]}}
+      if(!d){const w=open.map(d=>fill(d.wer,v));return{...B,t:"Warten auf "+[...new Set(w)].join(", "),x:"Du hast alles beantragt. Bis die Antwort kommt, gibt es für „"+v.name+"“ nichts zu tun.",btns:[{l:"Pflichten ansehen",a:"venture",id:v.id,sub:"pflichten",c:"ghost"},{l:"Zum Leben",a:"tab",id:"leben",c:"leben"}]}}
+      return{...B,t:d.t,x:fill(d.x,v).split(". ")[0]+".",btns:[{l:"Ansehen",a:"venture",id:v.id,sub:"pflichten"},...(d.auftrag?[{l:"Claude beauftragen",a:"auftrag",id:v.id,task:d.auftrag,c:"ghost"}]:NOASK.has(fill(d.wer,v))?[]:[{l:"Anfrage vorbereiten",a:"auftrag",id:v.id,task:"a_anfrage",duty:d.id,c:"ghost"}])]}}
     case"lauf": return{...B,t:"Den ersten "+t.lauf+" mitmachen und abrechnen",x:"Beim ersten Lauf bist du am besten selbst dabei. Danach trägst du Umsatz, Kosten und deine Stunden ein und siehst, was wirklich übrig bleibt.",btns:[{l:"Lauf eintragen",a:"sheet",id:"run",vid:v.id}]};
     case"team": return t.f.kommission
       ?{...B,t:"Läden finden, die für dich verkaufen",x:"Ein Laden oder Stand, der auf Provision verkauft, nimmt dir den Alltag ab.",btns:[{l:"Partnerläden finden",a:"auftrag",id:v.id,task:"a_laeden"},{l:"Zum Team",a:"venture",id:v.id,sub:"team",c:"ghost"}]}
@@ -229,12 +230,24 @@ function fill(s,v,extra){
     rechnung:v?rechnungTxt(v):"",laeufe:v&&v.runs.length?v.runs.map(x=>dateDE(x.d)+": Umsatz "+eur(n0(x.umsatz))+", Gewinn "+eur(n0(x.umsatz)-n0(x.kosten))).join("; "):"noch keine",
     preis:pr?eur(pr[0])+" bis "+eur(pr[1]):"",lm:f.lebensmittel?", Lebensmittelüberwachung, Gesundheitsamt":"",
     team:f.team?", Information des Teams nach § 613a BGB":"",
+    ...ntMap(),
     stelle:"die zuständige Stelle",thema:"die Anmeldung meines Vorhabens",...(extra||{})};
   return s.replace(/\{(\w+)\}/g,(m,k)=>map[k]!=null?map[k]:m);
 }
+function ntInfo(){const p=S.prof,r=NTR[p.land]||null,l=p.lehrkraft?NTL[p.land]:null;
+  const h=r?(p.lehrkraft&&p.land==="BE"?null:r.h):8;
+  return{r,l,h,grenze:h||8,hTxt:h?h+" Stunden pro Woche":p.lehrkraft&&p.land==="BE"?"ein Fünftel deiner Pflichtstunden":"ein Fünftel deiner regelmäßigen Arbeitszeit, bei 40 Stunden also 8 Stunden pro Woche"};}
+function ntMap(){const n=ntInfo(),r=n.r||{},l=n.l;
+  return{ntG:r.g||"Landesbeamtengesetz",ntU:r.u||"",ntX:(r.x||"")+(r.ok?"":" Die Angaben für dieses Land sind noch nicht amtlich geprüft. Kläre sie mit deiner Dienststelle."),
+    ntGrenze:"Als Regelgrenze gilt "+n.hTxt+" für alle Nebentätigkeiten zusammen, einschließlich Organisation und Vorbereitung.",
+    ntWer:l?"Landesschulamt":"Dienststelle",
+    ntVerb:(r.m==="G"&&S.prof.beruf==="beamt")?"zur Genehmigung vorlege":"anzeige",
+    ntWie:l?"Mit dem Formular „"+l.formName+"“ auf dem Dienstweg über deine Schulleitung an das Landesschulamt, rechtzeitig vor Beginn. Die Schulleitung gibt eine Stellungnahme dazu ab. Anzugeben sind Art und Aufgaben, Beginn, Wochentage und Uhrzeit, die voraussichtliche Vergütung im Monat und die Stunden pro Woche einschließlich Vor- und Nachbereitung. "+l.zeit+" Warte die Reaktion des Landesschulamts ab, bevor du anfängst. Die vorbereiteten Angaben stehen unter „Formularwerte“.":"Schriftlich an deine Dienststelle, rechtzeitig vor Beginn, mit Art der Tätigkeit, Stunden pro Woche einschließlich Organisation und erwarteter Vergütung. Frag nach, ob es ein Formular gibt. Die vorbereiteten Angaben stehen unter „Formularwerte“.",
+    oedWie:l?"Als angestellte Lehrkraft in Sachsen-Anhalt nutzt du dasselbe Formular wie Beamte, „"+l.formName+"“, auf dem Dienstweg über deine Schulleitung an das Landesschulamt. "+l.zeit:"Die Anzeige geht an die Personalstelle deines Arbeitgebers, bei Lehrkräften meist über die Schulleitung an die zuständige Landesbehörde. Eine kurze schriftliche Mail oder ein Formular genügt oft, frag nach, welche Form verlangt wird."};
+}
 function promptFor(v,task,dutyId){
   const a=AUFTRAEGE.find(x=>x.id===task), d=dutyId?PFLICHTEN.find(x=>x.id===dutyId):null;
-  const extra=d?{stelle:d.wer,thema:d.t+". Hintergrund: "+fill(d.x,v).replace(/\.\s*$/,"")}:null;
+  const extra=d?{stelle:fill(d.wer,v),thema:d.t+". Hintergrund: "+fill(d.x,v).replace(/\.\s*$/,"")}:null;
   return fill(a.p,v,extra)+"\n\nAntworte auf Deutsch in einfachen Sätzen. Nenne Quellen mit Link und sag klar, was ich selbst prüfen oder mit einer Fachperson klären muss.";
 }
 function preisSpanne(v){
@@ -422,6 +435,7 @@ function viewAmt(){
   let s=`<h2 style="margin-top:12px">Ämter und Pflichten</h2><p class="muted small">Was für deine Vorhaben nötig ist, abgeleitet aus Bundesland, Hauptberuf und Vorlage. Abhaken kannst du auch direkt hier.</p>`;
   if(!S.prof.land) s+=`<div class="sec"><button class="btn" data-a="sheet" data-id="profil">Zuerst den Rahmen festlegen</button></div>`;
   if(l){s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">${esc(l.n)}</span></div><div class="card flat"><p class="small">Landesrecht betrifft dich vor allem bei Feiertagen, Ausschank, Sonn- und Feiertagsverkauf${S.prof.beruf==="beamt"?" und beim Nebentätigkeitsrecht für Beamte":""}.</p><p class="small muted">Zusätzliche Feiertage in ${esc(l.n)}: ${l.ft.map(esc).join(", ")}. An diesen Tagen sind Märkte oft geschlossen, und Saisonhilfen zählen den Tag mit, wenn er eigentlich ein Arbeitstag gewesen wäre.</p>${act[0]?`<div><button class="btn small ghost" data-a="auftrag" data-id="${act[0].id}" data-task="a_land">Landesregeln prüfen lassen</button></div>`:""}</div></div>`}
+  {const bb=beamtBlock(null);if(bb)s+=`<div class="sec">${bb}</div>`}
   if(!act.length){s+=`<p class="muted small" style="margin-top:20px">Sobald ein Vorhaben hängt, erscheinen hier seine Pflichtschritte.</p>`;return s+foot()}
   const seen=new Set();
   ["vor","team","laufend","exit"].forEach(w=>{
@@ -439,8 +453,8 @@ function viewAmt(){
 }
 function dutyRow(v,d,showName){
   const on=dutyDone(v,d), key="d-"+v.id+"-"+d.id;
-  return`<div class="duty"><button class="check" data-a="duty" data-id="${v.id}" data-duty="${d.id}" aria-pressed="${on}" aria-label="${esc(d.t)} erledigt">${ICON.check}</button><div><p class="wer">${esc(d.wer)}${showName?" · "+esc(v.name):""}</p><p class="t">${esc(d.t)}${!on&&isPending(v,d)?` <span class="pill info">wartet seit ${dateDE(v.pending[d.id])}</span>`:""}</p></div>
-  <details data-key="${key}" ${OPEN.has(key)?"open":""}><summary>Warum und wie</summary><p>${esc(fill(d.x,v))}</p><p style="margin-top:6px"><strong>So geht’s:</strong> ${esc(fill(d.wie,v))}</p><div class="acts">${d.link?`<a class="linkbtn" href="${d.link}" target="_blank" rel="noopener">${esc(d.link.replace(/^https:\/\//,""))}</a>`:""}${d.auftrag?`<button class="btn small ghost" data-a="auftrag" data-id="${v.id}" data-task="${d.auftrag}">Claude beauftragen</button>`:""}${!d.auftrag&&!NOASK.has(d.wer)?`<button class="btn small ghost" data-a="auftrag" data-id="${v.id}" data-task="a_anfrage" data-duty="${d.id}">Anfrage vorbereiten</button>`:""}${d.form?`<button class="btn small ghost" data-a="sheet" data-id="form" data-form="${d.form}" data-vid="${v.id}">Formularwerte</button>`:""}</div>${!on&&d.w==="vor"&&!PERSON.has(d.id)?`<div class="acts"><button class="linkbtn" data-a="pend" data-id="${v.id}" data-duty="${d.id}">${isPending(v,d)?"Doch noch nicht beantragt":"Beantragt, warte auf Antwort"}</button></div>`:""}${on?`<p class="mono" style="margin-top:6px">erledigt am ${dateDE(PERSON.has(d.id)?S.pduties[d.id]:v.duties[d.id])}</p>`:""}</details></div>`;
+  return`<div class="duty"><button class="check" data-a="duty" data-id="${v.id}" data-duty="${d.id}" aria-pressed="${on}" aria-label="${esc(d.t)} erledigt">${ICON.check}</button><div><p class="wer">${esc(fill(d.wer,v))}${showName?" · "+esc(v.name):""}</p><p class="t">${esc(d.t)}${!on&&isPending(v,d)?` <span class="pill info">wartet seit ${dateDE(v.pending[d.id])}</span>`:""}</p></div>
+  <details data-key="${key}" ${OPEN.has(key)?"open":""}><summary>Warum und wie</summary><p>${esc(fill(d.x,v))}</p><p style="margin-top:6px"><strong>So geht’s:</strong> ${esc(fill(d.wie,v))}</p><div class="acts">${d.link&&fill(d.link,v)?`<a class="linkbtn" href="${esc(fill(d.link,v))}" target="_blank" rel="noopener">${esc(fill(d.link,v).replace(/^https:\/\//,"").split("/")[0])}</a>`:""}${d.auftrag?`<button class="btn small ghost" data-a="auftrag" data-id="${v.id}" data-task="${d.auftrag}">Claude beauftragen</button>`:""}${!d.auftrag&&!NOASK.has(fill(d.wer,v))?`<button class="btn small ghost" data-a="auftrag" data-id="${v.id}" data-task="a_anfrage" data-duty="${d.id}">Anfrage vorbereiten</button>`:""}${d.form?`<button class="btn small ghost" data-a="sheet" data-id="form" data-form="${d.form}" data-vid="${v.id}">Formularwerte</button>`:""}</div>${!on&&d.w==="vor"&&!PERSON.has(d.id)?`<div class="acts"><button class="linkbtn" data-a="pend" data-id="${v.id}" data-duty="${d.id}">${isPending(v,d)?"Doch noch nicht beantragt":"Beantragt, warte auf Antwort"}</button></div>`:""}${on?`<p class="mono" style="margin-top:6px">erledigt am ${dateDE(PERSON.has(d.id)?S.pduties[d.id]:v.duties[d.id])}</p>`:""}</details></div>`;
 }
 const OPEN=new Set();
 function phaseOpen(w,v,n){if(w==="vor")return true;if(w==="exit")return n>=7||!!v.exit;return n>=4}
@@ -519,7 +533,8 @@ const SHEETS={
     return`${head("Rahmen","Dein Rahmen")}
     <div class="field"><label for="f-land">Bundesland, in dem du steuerlich gemeldet bist</label><select id="f-land" data-bind="prof.land"><option value="">Bitte wählen</option>${LAENDER.map(l=>`<option value="${l.id}" ${p.land===l.id?"selected":""}>${l.n}</option>`).join("")}</select></div>
     <div class="field"><label for="f-ort">Ort oder Region (optional)</label><input id="f-ort" type="text" data-bind="prof.ort" value="${esc(p.ort)}" placeholder="zum Beispiel Leipzig"><span class="hint">Nur für die Aufträge an Claude, damit Recherchen in deiner Gegend suchen. Keine Adresse nötig.</span></div>
-    <div class="field"><span class="lab">Hauptberuf</span><div class="chips">${BERUFE.map(b=>`<button class="chip" data-a="beruf" data-id="${b.id}" data-key="ber${b.id}" aria-pressed="${p.beruf===b.id}">${b.n}</button>`).join("")}</div>${p.beruf==="ang"||p.beruf==="oed"?`<div class="chips" style="margin-top:4px"><button class="chip" data-a="pflag" data-k="befristet" data-id="${p.befristet?0:1}" data-key="befr" aria-pressed="${!!p.befristet}">Befristet oder in der Probezeit</button></div>`:""}</div>
+    <div class="field"><span class="lab">Hauptberuf</span><div class="chips">${BERUFE.map(b=>`<button class="chip" data-a="beruf" data-id="${b.id}" data-key="ber${b.id}" aria-pressed="${p.beruf===b.id}">${b.n}</button>`).join("")}</div>${p.beruf==="ang"||p.beruf==="oed"||p.beruf==="beamt"?`<div class="chips" style="margin-top:4px">${p.beruf!=="beamt"?`<button class="chip" data-a="pflag" data-k="befristet" data-id="${p.befristet?0:1}" data-key="befr" aria-pressed="${!!p.befristet}">Befristet oder in der Probezeit</button>`:""}${p.beruf!=="ang"?`<button class="chip" data-a="pflag" data-k="lehrkraft" data-id="${p.lehrkraft?0:1}" data-key="lehr" aria-pressed="${!!p.lehrkraft}">Lehrkraft an einer Schule</button>`:""}</div>`:""}
+    ${p.beruf==="beamt"?`<p class="hint">Als Beamtin oder Beamter gilt in ${esc(landN())}: ${(NTR[p.land]||{}).m==="A"?"ein eigenes Gewerbe wird angezeigt, nicht genehmigt":(NTR[p.land]?"ein eigenes Gewerbe braucht eine Genehmigung":"wähl oben dein Bundesland")}. Die Regelgrenze für alle Nebentätigkeiten zusammen ist ${esc(ntInfo().hTxt)}.</p>`:""}</div>
     <div class="wirehead"><span class="eyebrow">Geld</span></div>
     <p class="hint">Daraus berechnet die App nur, wie viel du in Vorhaben stecken kannst, ohne dich zu gefährden. Alles bleibt auf deinem Gerät.</p>
     <div class="grid2"><div class="field"><label for="f-netto">Netto im Monat</label><div class="suffix"><input id="f-netto" type="text" inputmode="decimal" data-num="1" data-bind="prof.netto" value="${p.netto?dz(p.netto):""}"><span>€</span></div></div><div class="field"><label for="f-fix">Ausgaben im Monat</label><div class="suffix"><input id="f-fix" type="text" inputmode="decimal" data-num="1" data-bind="prof.fix" value="${p.fix?dz(p.fix):""}"><span>€</span></div></div></div>
@@ -532,7 +547,7 @@ const SHEETS={
     <div class="field"><span class="lab">Konsumschulden oder Dispo?</span><div class="chips"><button class="chip" data-a="pflag" data-k="schuld" data-id="0" data-key="schuld0" aria-pressed="${!p.schuld}">Nein</button><button class="chip" data-a="pflag" data-k="schuld" data-id="1" data-key="schuld1" aria-pressed="${!!p.schuld}">Ja</button></div></div>
     ${p.schuld?`<div class="field"><label for="f-sd">Offener Betrag</label><div class="suffix"><input id="f-sd" type="text" inputmode="decimal" data-num="1" data-bind="prof.schulden" value="${p.schulden?dz(p.schulden):""}"><span>€</span></div><span class="hint">Ratenkredite, Kreditkarte, Dispo. Nicht die Immobilie.</span></div>`:""}
     <div class="field"><span class="lab">An welchen Tagen darf es um die Vorhaben gehen?</span><div class="chips">${[1,2,3,4,5,6,0].map(d=>`<button class="chip" data-a="tag" data-id="${d}" data-key="ptag${d}" aria-pressed="${p.tage.includes(d)}">${WT[d]}</button>`).join("")}</div><span class="hint">An allen anderen Tagen schlägt die App nur Schritte für dein Leben vor. Heute zählt einmalig als Vorhabentag.</span></div>
-    <div class="field"><span class="lab">Wie viele Stunden pro Woche, für alle Vorhaben zusammen?</span><div class="chips">${[1,2,3,4,6,8].map(h=>`<button class="chip" data-a="std" data-id="${h}" data-key="pstd${h}" aria-pressed="${p.stunden==h}">${h}</button>`).join("")}</div></div>
+    <div class="field"><span class="lab">Wie viele Stunden pro Woche, für alle Vorhaben zusammen?</span><div class="chips">${[1,2,3,4,6,8].map(h=>`<button class="chip" data-a="std" data-id="${h}" data-key="pstd${h}" aria-pressed="${p.stunden==h}">${h}</button>`).join("")}</div>${p.beruf==="beamt"?`<span class="hint">Deine dienstrechtliche Grenze liegt bei ${esc(ntInfo().hTxt)}, für alle Nebentätigkeiten zusammen. ${p.stunden>=ntInfo().grenze?"Du planst schon bis an diese Grenze. Lass Luft für Saisonspitzen.":"Mit diesem Rahmen bleibst du darunter."}</span>`:""}</div>
     ${ustBlock()}
     <div id="rahmenOut">${rahmenOut()}</div>
     <button class="btn wide" data-a="profilSave">Speichern</button>`},
@@ -566,7 +581,7 @@ const SHEETS={
     <button class="btn wide sinn" data-a="saveResult" data-id="${v.id}" data-task="${a.id}">Ablegen</button>
     ${res.length?`<div class="list">${res.map(r=>`<details class="li" style="display:block"><summary class="t">${dateDE(r.d)}</summary><pre class="prompt">${esc(r.text)}</pre></details>`).join("")}</div>`:""}`},
 
-  form(o){const v=vById(o.vid); const rows=o.form==="gewa"?gewaRows(v):fseRows();
+  form(o){const v=vById(o.vid); if(o.form==="nt") return ntForm(v); const rows=o.form==="gewa"?gewaRows(v):fseRows();
     return`${head(o.form==="gewa"?"Formular":"Formular",o.form==="gewa"?"Gewerbeanmeldung":"Fragebogen zur steuerlichen Erfassung")}
     <p class="muted small">${o.form==="gewa"?"Die Angaben für das Formular GewA 1, vorbereitet aus deinem Vorhaben. Persönliche Daten wie Anschrift und Ausweis trägst du im Portal selbst ein.":"Die wichtigsten Angaben für ELSTER, berechnet aus der Rechnung aller Vorhaben. Prüfe jede Zahl, bevor du sie überträgst."}</p>
     ${o.form==="gewa"?`<div class="field"><label for="g-start">Beginn</label><input id="g-start" type="date" data-bind="v.${v.id}.start" value="${esc(v.start||"")}"></div>`:""}
@@ -693,6 +708,49 @@ function rahmenOut(){const r=rahmen(),p=S.prof;
   ${r.schulden?`<p class="warn">Mit Konsumschulden oder Dispo ist Tilgen fast immer die bessere Anlage. Die Zinsen dort sind höher als das, was ein kleines Vorhaben sicher einbringt.</p>`:""}
   ${r.monat<0?`<p class="warn">Dein Monat geht gerade nicht auf. Die App hält dafür sechs Monate Fehlbetrag im Notgroschen zurück.</p>`:""}`;
 }
+function ntSpitze(v){const r=calc(v),t=tplOf(v);if(!r.saison)return null;
+  const proWoche=Math.min(6,Math.max(1,Math.round(r.laeufe/5)));   // Saison von etwa fünf Wochen angenommen
+  return Math.ceil(n0(v.calc.meineStd)*proWoche+1)}
+function ntForm(v){const t=tplOf(v),r=calc(v),n=ntInfo(),l=n.l,p=S.prof,sp=ntSpitze(v);
+  const tage=p.tage.slice().sort((a,b)=>((a+6)%7)-((b+6)%7)).map(d=>WTL[d]).join(", ");
+  const andere=aktive().filter(x=>x.id!==v.id).map(x=>"„"+x.name+"“ ("+tplOf(x).n+")");
+  const rows=[
+    ["Art und Aufgaben",t.taetig+" als Inhaber eines Einzelunternehmens („"+v.name+"“). "+(v.team.length?"Den Alltag führen "+v.team.map(m=>m.name).join(", ")+". Meine Aufgaben: Planung, Einkauf, Absprachen, Abrechnung.":"Meine Aufgaben: Planung, Einkauf, Absprachen, Abrechnung."),""],
+    ["Bei welcher Stelle","Eigenes Gewerbe, kein Arbeitgeber",""],
+    ["Beginn",v.start?dateDE(v.start):"Datum eintragen, an dem du anfängst",""],
+    ["Regelmäßig oder unregelmäßig",r.saison?"unregelmäßig, saisonal, etwa "+r.laeufe+" "+t.lauf+"e im Jahr":"regelmäßig",""],
+    ["Wochentage und Uhrzeit",tage+(l?", jeweils nach 14 Uhr":"")+(r.saison?". Die Markt- oder Festtage selbst führt das Team":""),l?"Laut Erlass sind Nebentätigkeiten grundsätzlich nur nach 14 Uhr zulässig.":""],
+    ["Stunden pro Woche, mit Vor- und Nachbereitung","im Durchschnitt etwa "+Math.max(1,Math.ceil(r.wochenStd))+" Stunden"+(sp?", in der Saison bis etwa "+sp+" Stunden":""),sp&&sp>n.grenze?"Achtung: In der Saison liegst du über der Regelgrenze von "+n.grenze+" Stunden. Kläre vorher, ob ein Durchschnitt über mehrere Wochen anerkannt wird, oder plane weniger eigene Stunden.":"Die Regelgrenze sind "+n.hTxt+" für alle Nebentätigkeiten zusammen."],
+    ["Voraussichtliche Vergütung im Monat","etwa "+eur(Math.max(0,r.jahrG)/12)+" Gewinn im Jahresschnitt (Umsatz etwa "+eur(r.jahrU/12)+")","Bei einem Gewerbe gibt es keine Vergütung im engeren Sinn. Gib den erwarteten Gewinn an und nenne den Umsatz dazu."],
+    ["Weitere Nebentätigkeiten",andere.length?andere.join(", "):"keine",andere.length?"Jedes Vorhaben ist eine eigene Nebentätigkeit. Die Stunden zählen zusammen.":""]
+  ];
+  return`${head("Formular","Nebentätigkeit "+(n.r&&n.r.m==="G"&&p.beruf==="beamt"?"beantragen":"anzeigen"))}
+    <p class="muted small">Die Angaben, die ${l?"das Formular des Landesschulamts":"deine Dienststelle"} meist verlangt, vorbereitet aus deinem Vorhaben und deinem Rahmen. Prüf jede Angabe, bevor du sie überträgst.</p>
+    <div class="field"><label for="n-start">Beginn</label><input id="n-start" type="date" data-bind="v.${v.id}.start" value="${esc(v.start||"")}"></div>
+    <div>${rows.map((r,i)=>`<div class="formrow"><div><p class="k">${esc(r[0])}</p><p class="v" id="nv${i}">${esc(r[1])}</p>${r[2]?`<p class="muted small">${esc(r[2])}</p>`:""}</div><button class="btn small ghost" data-a="copy" data-src="nv${i}">Kopieren</button></div>`).join("")}</div>
+    ${l?`<a class="btn ghost wide" href="${esc(l.form)}" target="_blank" rel="noopener">Formular beim Landesschulamt</a><p class="hint">Grundlage: ${esc(n.r.g)} und <a href="${esc(l.erlassU)}" target="_blank" rel="noopener">${esc(l.erlass)}</a>.</p>`:n.r&&n.r.u?`<p class="hint">Grundlage: <a href="${esc(n.r.u)}" target="_blank" rel="noopener">${esc(n.r.g)}</a>.</p>`:""}
+    <button class="btn ghost wide" data-a="auftrag" data-id="${v.id}" data-task="a_nt">Anschreiben von Claude formulieren lassen</button>`;
+}
+function beamtNotes(v){const p=S.prof;if(p.beruf!=="beamt"&&!(p.lehrkraft&&p.beruf==="oed"))return[];
+  const t=v?tplOf(v):null,f=t?t.f:{},n=ntInfo(),out=[];
+  if(p.beruf==="beamt"){
+    const sp=v?ntSpitze(v):null;
+    if(v&&calc(v).wochenStd>n.grenze) out.push("Dieses Vorhaben braucht im Schnitt mehr als "+n.grenze+" Stunden pro Woche von dir. Das liegt über der Regelgrenze für Nebentätigkeiten.");
+    else if(sp&&sp>n.grenze) out.push("In der Saison kommst du auf bis zu etwa "+sp+" Stunden pro Woche. Die Regelgrenze sind "+n.grenze+". "+(p.land==="SN"?"In Sachsen zählt der Durchschnitt über höchstens vier Monate.":"Ob ein Durchschnitt über mehrere Wochen anerkannt wird, ist nicht geregelt. Kläre das vorher mit deiner Dienststelle."));
+    out.push("Auch in den Ferien gilt die Grenze. Ein Gericht in Mecklenburg-Vorpommern hat entschieden, dass mehr als 8 Stunden Nebentätigkeit pro Woche im Urlaub in der Regel dienstliche Interessen beeinträchtigen.");
+    out.push("Während einer Krankschreibung solltest du nicht im Vorhaben mitarbeiten. Gerichte haben das schon als Dienstvergehen gewertet.");
+  }
+  if(p.lehrkraft){
+    out.push("Nicht an deiner Schule: kein Verkauf, keine Werbung und keine Angebote auf dem Schulgelände, keine Nutzung von Schulmail, Räumen oder Kopierer und keine Kontaktdaten von Eltern oder Schülern.");
+    if(f.kurs) out.push("Keine bezahlten Kurse für eigene Schülerinnen und Schüler oder deren Eltern. Das kann die Unparteilichkeit berühren und ist ein typischer Grund für eine Untersagung.");
+    if(f.ausschank||f.markt) out.push("Halte Abstand zu Festen und Märkten deiner eigenen Schule, besonders beim Ausschank von Alkohol.");
+    if(p.land==="ST") out.push(NTL.ST.zeit);
+  }
+  return out;
+}
+function beamtBlock(v){const b=beamtNotes(v);if(!b.length)return"";
+  return`<details class="phase" data-key="bn-${v?v.id:"all"}" ${OPEN.has("bn-"+(v?v.id:"all"))?"open":""}><summary>Als ${S.prof.beruf==="beamt"?"Beamtin oder Beamter":"Lehrkraft"} beachten <span class="pill">${b.length}</span></summary><ul class="small" style="margin:0 0 12px;padding-left:18px;display:grid;gap:6px">${b.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></details>`;
+}
 function gewaRows(v){const t=tplOf(v), f=t.f;
   return[
     ["Angemeldete Tätigkeit",t.taetig,"Möglichst genau, aber nicht zu eng. Ändere es, wenn du zum Beispiel selbst herstellst."],
@@ -743,12 +801,12 @@ const VSUB={
     <button class="btn ghost wide" data-a="auftrag" data-id="${v.id}" data-task="a_kalk">Rechnung von Claude prüfen lassen</button>`},
 
   pflichten(v){const ds=dutiesFor(v), n=stage(v);
-    return`<p class="muted small">Abgeleitet aus ${esc(landN())}, deinem Hauptberuf und der Vorlage. Bauteil „Angemeldet“ gibt es, wenn alle Schritte vor dem Start erledigt sind.</p>`+
+    return`<p class="muted small">Abgeleitet aus ${esc(landN())}, deinem Hauptberuf und der Vorlage. Bauteil „Angemeldet“ gibt es, wenn alle Schritte vor dem Start erledigt sind.</p>`+beamtBlock(v)+
     ["vor","team","laufend","exit"].map(w=>{const l=ds.filter(d=>d.w===w);if(!l.length)return"";const rows=l.map(d=>dutyRow(v,d,false)).join("");
       return phaseOpen(w,v,n)?`<div class="wirehead"><span class="eyebrow">${PFLICHT_PHASEN[w]}</span></div><div>${rows}</div>`:phaseLater(w,"ph-"+v.id+w,l.length,rows)}).join("")+
     (tplOf(v).f.kurs?"":`<button class="btn ghost wide" data-a="sheet" data-id="form" data-form="gewa" data-vid="${v.id}">Gewerbeanmeldung vorbereitet</button>`)},
 
-  auftraege(v){const f=tplOf(v).f, list=AUFTRAEGE.filter(a=>!a.f||f[a.f]);
+  auftraege(v){const f=tplOf(v).f, list=AUFTRAEGE.filter(a=>(!a.f||f[a.f])&&(!a.nur||a.nur(S.prof)));
     const grp={pass:"Prüfen",amt:"Anmelden",prod:"Ausgestalten",team:"Übertragen",exit:"Weitergeben"};
     return`<p class="muted small">Jeder Auftrag ist mit deinem Vorhaben gefüllt. Claude recherchiert oder schreibt, du legst das Ergebnis hier ab.</p>`+
     Object.keys(grp).map(g=>{const l=list.filter(a=>a.out===g);return l.length?`<div class="wirehead"><span class="eyebrow">${grp[g]}</span></div><div class="list">${l.map(a=>{const k=v.results.filter(r=>r.task===a.id).length;return`<button class="li" data-a="auftrag" data-id="${v.id}" data-task="${a.id}"><span class="grow"><span class="t">${esc(a.t)}</span>${k?`<span class="s">${k} Ergebnis${k>1?"se":""} abgelegt</span>`:""}</span><span class="chev"></span></button>`}).join("")}</div>`:""}).join("")+
