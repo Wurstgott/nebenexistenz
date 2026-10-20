@@ -646,7 +646,7 @@ const AUFTRAEGE = [
   {id:"a_kaeufer", t:"Verkauf an die Standleitung vorbereiten", out:"exit",
    p:"Ich möchte mein Vorhaben „{name}“ ({vorlage}) an die Person verkaufen, die es bisher für mich führt. Kennzahlen: {rechnung}. Bisherige Läufe: {laeufe}. Preisvorstellung: {preis}. Bereite vor: einen Gesprächsleitfaden, einen fairen Ratenplan (zum Beispiel 30 Prozent Anzahlung, Rest in 12 bis 24 Monatsraten, Eigentumsvorbehalt am Inventar), was ich in einer Übergangssaison an Begleitung anbiete, und ein Starterpaket mit den Pflichtschritten, die die neue Inhaberin selbst erledigen muss."},
   {id:"a_ruecklage", t:"Steuerrücklage berechnen", out:"pass",
-   p:"Ich bin {beruf} und habe nebenher ein Gewerbe „{name}“. Rahmen: {rechnung}. Erkläre grob, wie viel Einkommensteuer auf den Gewinn zusätzlich anfällt, wie die Nachzahlung und die Vorauszahlungen nach der ersten Steuererklärung ablaufen, und wie viel ich pro Monat zurücklegen sollte. Nenne die Annahmen, die du triffst."},
+   p:"Ich bin {beruf}{immo} und habe nebenher ein Gewerbe „{name}“. Rahmen: {rechnung}. Erkläre grob, wie viel Einkommensteuer auf den Gewinn zusätzlich anfällt, wie die Nachzahlung und die Vorauszahlungen nach der ersten Steuererklärung ablaufen, und wie viel ich pro Monat zurücklegen sollte. Nenne die Annahmen, die du triffst."},
   {id:"a_liefer", t:"Lieferanten anfragen", out:"prod",
    p:"Ich brauche für mein Vorhaben „{name}“ ({desc}) Material oder Ware in kleinen Mengen. Rahmen: {rechnung}. Finde 5 bis 8 Lieferanten in Deutschland, möglichst regional und nachhaltig, mit Mindestmengen und ungefähren Preisen. Schreib dazu eine kurze Anfrage, die ich an alle schicken kann."}
 ];
@@ -710,7 +710,7 @@ const LEBEN_IMPULSE = [
 ];
 
 /* ===== Nebenexistenz · Logik ===== */
-const BUILD="20.10.2026, 01:30";
+const BUILD="20.10.2026, 12:13";
 const KEY="nebenexistenz-v1";
 const GV=3;
 const MAX_AKTIV=3;
@@ -795,11 +795,17 @@ function calc(v){
 }
 function tplKapital(t){return calc({tpl:t.id,calc:Object.assign({form:t.f.team?(t.besch||"mini"):"keine",laeufe:t.laeufe,start:Math.round((t.start[0]+t.start[1])/2/100)*100},t.calc),runs:[],team:[]}).kapital}
 function rahmen(){
-  const p=S.prof, mon=(p.beruf==="ang"||p.beruf==="oed"||p.beruf==="beamt")?3:6, notgroschen=mon*n0(p.fix), frei=Math.max(0,n0(p.ruecklage)-notgroschen);
+  const p=S.prof, mon=(p.beruf==="ang"||p.beruf==="oed"||p.beruf==="beamt")?3:6;
+  const immoPuffer=p.immo?3*n0(p.immoRate):0;
+  const notgroschen=mon*n0(p.fix)+immoPuffer;
+  const wpDeckt=Math.min(notgroschen/2,0.5*n0(p.wp));          // Wertpapiere ersetzen höchstens die Hälfte des Notgroschens, mit 50 % Abschlag
+  const bar=notgroschen-wpDeckt;
+  const frei=Math.max(0,n0(p.ruecklage)-n0(p.verplant)-bar);
   const erstes=S.ventures.length<=1;
-  const deckel=Math.round(frei*(erstes?0.10:0.15)/50)*50, gesamt=Math.round(frei*0.30/50)*50, monat=n0(p.netto)-n0(p.fix);
+  const deckel=Math.round(frei*(erstes?0.10:0.15)/50)*50, gesamt=Math.round(frei*0.30/50)*50;
+  const monat=n0(p.netto)-n0(p.fix)+(p.immo?n0(p.immoUeber):0);
   const gebunden=aktive().reduce((s,v)=>s+calc(v).kapital,0);
-  return{mon,notgroschen,frei,deckel,gesamt,gebunden,erstes,monat,gesetzt:n0(p.ruecklage)>0||n0(p.netto)>0};
+  return{mon,notgroschen,immoPuffer,wpDeckt,bar,frei,deckel,gesamt,gebunden,erstes,monat,gesetzt:n0(p.ruecklage)>0||n0(p.netto)>0};
 }
 function jahresUmsatzAlle(){return aktive().reduce((s,v)=>s+calc(v).jahrU,0)}
 function jahresGewinnAlle(){return aktive().reduce((s,v)=>s+calc(v).jahrG,0)}
@@ -922,7 +928,7 @@ function fill(s,v,extra){
   const map={land:landN(),ort:S.prof.ort||"meiner Region",frist:RECHT.fsEFrist,kuV:RECHT.kuVorjahr.toLocaleString("de-DE"),kuL:RECHT.kuLaufend.toLocaleString("de-DE"),
     kurzTage:RECHT.kurzTage,desc:v&&t?(v.desc||t.kurz):"",mini:RECHT.minijob,abg:RECHT.minijobAbgabe,ml:RECHT.mindestlohn.toLocaleString("de-DE",{minimumFractionDigits:2}),
     haerte:RECHT.haerte,gew:RECHT.gewStFrei.toLocaleString("de-DE"),ihk:RECHT.ihkFrei.toLocaleString("de-DE"),stand:RECHT.stand,
-    beruf:({ang:"angestellt",oed:"im öffentlichen Dienst angestellt",beamt:"verbeamtet",stud:"im Studium",selbst:"schon selbstständig",ohne:"nicht angestellt"})[S.prof.beruf]||"berufstätig",name:v?v.name:"",vorlage:t?t.n:"",taetig:t?t.taetig:"",std:v?Math.max(1,Math.ceil(calc(v).wochenStd)):S.prof.stunden,
+    immo:S.prof.immo?" und habe Einkünfte aus Vermietung":"",beruf:({ang:"angestellt",oed:"im öffentlichen Dienst angestellt",beamt:"verbeamtet",stud:"im Studium",selbst:"schon selbstständig",ohne:"nicht angestellt"})[S.prof.beruf]||"berufstätig",name:v?v.name:"",vorlage:t?t.n:"",taetig:t?t.taetig:"",std:v?Math.max(1,Math.ceil(calc(v).wochenStd)):S.prof.stunden,
     form:tm&&tm.form==="mini"?"geringfügige Beschäftigung (Minijob)":"kurzfristige Beschäftigung",
     rechnung:v?rechnungTxt(v):"",laeufe:v&&v.runs.length?v.runs.map(x=>dateDE(x.d)+": Umsatz "+eur(n0(x.umsatz))+", Gewinn "+eur(n0(x.umsatz)-n0(x.kosten))).join("; "):"noch keine",
     preis:pr?eur(pr[0])+" bis "+eur(pr[1]):"",lm:f.lebensmittel?", Lebensmittelüberwachung, Gesundheitsamt":"",
@@ -1218,9 +1224,15 @@ const SHEETS={
     <div class="field"><label for="f-land">Bundesland, in dem du steuerlich gemeldet bist</label><select id="f-land" data-bind="prof.land"><option value="">Bitte wählen</option>${LAENDER.map(l=>`<option value="${l.id}" ${p.land===l.id?"selected":""}>${l.n}</option>`).join("")}</select></div>
     <div class="field"><label for="f-ort">Ort oder Region</label><input id="f-ort" type="text" data-bind="prof.ort" value="${esc(p.ort)}" placeholder="zum Beispiel Leipzig"><span class="hint">Nur für die Aufträge an Claude, damit Recherchen in deiner Gegend suchen. Keine Adresse nötig.</span></div>
     <div class="field"><span class="lab">Hauptberuf</span><div class="chips">${BERUFE.map(b=>`<button class="chip" data-a="beruf" data-id="${b.id}" data-key="ber${b.id}" aria-pressed="${p.beruf===b.id}">${b.n}</button>`).join("")}</div></div>
-    <div class="grid2"><div class="field"><label for="f-netto">Netto im Monat</label><div class="suffix"><input id="f-netto" type="text" inputmode="decimal" data-num="1" data-bind="prof.netto" value="${p.netto||""}"><span>€</span></div></div>
-    <div class="field"><label for="f-fix">Feste Ausgaben</label><div class="suffix"><input id="f-fix" type="text" inputmode="decimal" data-num="1" data-bind="prof.fix" value="${p.fix||""}"><span>€</span></div></div></div>
-    <div class="field"><label for="f-rl">Rücklagen gesamt</label><div class="suffix"><input id="f-rl" type="text" inputmode="decimal" data-num="1" data-bind="prof.ruecklage" value="${p.ruecklage||""}"><span>€</span></div></div>
+    <div class="wirehead"><span class="eyebrow">Jeden Monat</span></div>
+    <div class="grid2"><div class="field"><label for="f-netto">Netto im Monat</label><div class="suffix"><input id="f-netto" type="text" inputmode="decimal" data-num="1" data-bind="prof.netto" value="${dz(p.netto)}"><span>€</span></div></div><div class="field"><label for="f-fix">Feste Ausgaben</label><div class="suffix"><input id="f-fix" type="text" inputmode="decimal" data-num="1" data-bind="prof.fix" value="${dz(p.fix)}"><span>€</span></div></div></div>
+    <p class="hint" style="margin-top:-6px">Feste Ausgaben ohne deine vermietete Immobilie. Die trägst du unten getrennt ein.</p>
+    <div class="wirehead"><span class="eyebrow">Vermögen</span></div>
+    <div class="field"><label for="f-rl">Verfügbares Geld</label><div class="suffix"><input id="f-rl" type="text" inputmode="decimal" data-num="1" data-bind="prof.ruecklage" value="${dz(p.ruecklage)}"><span>€</span></div><span class="hint">Konto, Tagesgeld, bald fälliges Festgeld. <button class="linkbtn" style="min-height:0;padding:0" data-a="explain" data-id="ruecklagen">Was zählt dazu?</button></span></div>
+    <div class="grid2"><div class="field"><label for="f-wp">ETF und Aktien</label><div class="suffix"><input id="f-wp" type="text" inputmode="decimal" data-num="1" data-bind="prof.wp" value="${dz(p.wp)}"><span>€</span></div></div><div class="field"><label for="f-kr">Krypto</label><div class="suffix"><input id="f-kr" type="text" inputmode="decimal" data-num="1" data-bind="prof.krypto" value="${dz(p.krypto)}"><span>€</span></div></div></div>
+    <div class="field"><label for="f-vp">Davon schon verplant</label><div class="suffix"><input id="f-vp" type="text" inputmode="decimal" data-num="1" data-bind="prof.verplant" value="${dz(p.verplant)}"><span>€</span></div><span class="hint">Zum Beispiel Eigenkapital für eine Immobilie, die du kaufen willst, oder ein Auto.</span></div>
+    <div class="field"><span class="lab">Vermietete Immobilie</span><div class="chips"><button class="chip" data-a="immo" data-id="0" data-key="immo0" aria-pressed="${!p.immo}">Keine</button><button class="chip" data-a="immo" data-id="1" data-key="immo1" aria-pressed="${!!p.immo}">Ja, eine oder mehrere</button></div></div>
+    ${p.immo?`<div class="grid2"><div class="field"><label for="f-iu">Ergebnis pro Monat</label><div class="suffix"><input id="f-iu" type="text" inputmode="text" data-num="1" data-bind="prof.immoUeber" value="${dz(p.immoUeber)}"><span>€</span></div></div><div class="field"><label for="f-ir">Kreditrate pro Monat</label><div class="suffix"><input id="f-ir" type="text" inputmode="decimal" data-num="1" data-bind="prof.immoRate" value="${dz(p.immoRate)}"><span>€</span></div></div></div><p class="hint" style="margin-top:-6px">Ergebnis heißt Miete minus Kreditrate, Hausgeld und Rücklage. Es kann auch negativ sein, dann ein Minus davor. <button class="linkbtn" style="min-height:0;padding:0" data-a="explain" data-id="immo">Warum das zählt</button></p>`:""}
     <div class="field"><span class="lab">An welchen Tagen darf es um die Vorhaben gehen?</span><div class="chips">${[1,2,3,4,5,6,0].map(d=>`<button class="chip" data-a="tag" data-id="${d}" data-key="ptag${d}" aria-pressed="${p.tage.includes(d)}">${WT[d]}</button>`).join("")}</div><span class="hint">An allen anderen Tagen schlägt die App nur Schritte für dein Leben vor. Heute zählt einmalig als Vorhabentag.</span></div>
     <div class="field"><span class="lab">Wie viele Stunden pro Woche, für alle Vorhaben zusammen?</span><div class="chips">${[1,2,3,4,6,8].map(h=>`<button class="chip" data-a="std" data-id="${h}" data-key="pstd${h}" aria-pressed="${p.stunden==h}">${h}</button>`).join("")}</div></div>
     <div class="field"><span class="lab">Umsatzsteuer</span><div class="chips"><button class="chip" data-a="ust" data-id="0" data-key="ust0" aria-pressed="${!p.ust}">Kleinunternehmer</button><button class="chip" data-a="ust" data-id="1" data-key="ust1" aria-pressed="${!!p.ust}">Mit Umsatzsteuer</button></div><span class="hint">Als Kleinunternehmer berechnest du keine Umsatzsteuer, solange der Umsatz aller Vorhaben unter ${RECHT.kuVorjahr.toLocaleString("de-DE")} € bleibt. Mit Umsatzsteuer rechnet die App deine Preise als Bruttopreise.</span></div>
@@ -1318,7 +1330,10 @@ const SHEETS={
       zeit:["Vorhabenzeit","Alles, was du selbst für die Vorhaben tust, in den letzten sieben Tagen. Dein Rahmen sind "+S.prof.stunden+" Stunden pro Woche. Liegt die Zeit darüber, neigt sich das Mobile zu den Vorhaben."],
       menschen:["Menschen gesehen","Wie viele deiner nahen Menschen du in den letzten 14 Tagen eingetragen hast. Weniger als die Hälfte lässt das Mobile zu den Vorhaben kippen."],
       kapital:["Geld bis zum Start","Was du vorstrecken musst, bevor Geld zurückkommt: Startkosten, Kosten pro Jahr und bei Saisonvorhaben etwa die Hälfte der Standgebühren der Saison und ein Viertel der Saisonware, weil beides teils im Voraus bezahlt wird. Bei anderen Vorhaben zwei Läufe Vorlauf."],
-      deckel:["Wie viel Geld du einsetzen kannst","Von deinen Rücklagen bleiben feste Ausgaben als Notgroschen unberührt: drei Monate, wenn du angestellt oder verbeamtet bist, sonst sechs. Vom Rest schlagen wir für das erste Vorhaben höchstens 10 Prozent vor, für jedes weitere 15 Prozent und für alle zusammen 30 Prozent. Das erste Vorhaben ist auch Lehrgeld. Das ist eine Faustregel zur Vorsicht, keine Anlageberatung."]
+      ruecklagen:["Was zum verfügbaren Geld zählt","Dazu zählt Geld, das du innerhalb weniger Wochen ohne Verlust nutzen kannst: Guthaben auf dem Konto über deinem Monatsbedarf, Tagesgeld und Festgeld, das in den nächsten Monaten fällig wird. Nicht dazu zählen das Kapital in einer Immobilie, Bausparverträge, Altersvorsorge wie Riester, Rürup, Betriebsrente oder Lebensversicherung und Geld, das du schon für etwas anderes eingeplant hast. Wertpapiere und Krypto trägst du getrennt ein, weil ihr Wert schwankt."],
+      notgroschen:["Notgroschen","Der Notgroschen bleibt unberührt, egal wie gut ein Vorhaben aussieht. Er umfasst drei Monate feste Ausgaben, wenn du angestellt oder verbeamtet bist, sonst sechs. Mit einer vermieteten Immobilie kommen drei Kreditraten dazu, damit ein Mietausfall oder eine Reparatur dich nicht in Not bringt. ETF und Aktien können höchstens die Hälfte des Notgroschens ersetzen, und zwar nur mit der Hälfte ihres Werts, weil sie im falschen Moment gerade gefallen sein können. Krypto zählt gar nicht, weil der Kurs zu stark schwankt."],
+      immo:["Vermietete Immobilie","Eine abbezahlte oder laufend finanzierte Wohnung bindet Kapital, das du für ein Vorhaben nicht nutzen kannst. Deshalb zählt sie nicht als Geld. Sie wirkt aber auf zwei Arten: Das monatliche Ergebnis aus Miete, Rate, Hausgeld und Rücklage verändert, was dir jeden Monat bleibt. Und für Mietausfall oder Reparaturen hält die App drei Kreditraten zusätzlich im Notgroschen zurück. Steuerlich kommen Vermietung, Gehalt und Gewerbe in derselben Einkommensteuererklärung zusammen. Ein Gewinn aus dem Vorhaben wird darum mit deinem persönlichen Steuersatz besteuert, der durch die Mieteinnahmen schon höher liegen kann."],
+      deckel:["Wie viel Geld du einsetzen kannst","Von deinem verfügbaren Geld ziehen wir ab, was schon verplant ist, und den Notgroschen. Vom Rest empfehlen wir für das erste Vorhaben höchstens 10 Prozent, für jedes weitere 15 Prozent und für alle zusammen 30 Prozent. Das erste Vorhaben ist auch Lehrgeld. Mehr kannst du bewusst bestätigen. Gesperrt ist nur, was an den Notgroschen oder an verplantes Geld gehen würde. Das Geld für ein Vorhaben sollte aus diesem freien Geld kommen und nicht aus dem Verkauf von Anlagen. Wer ETF verkauft, zahlt auf Gewinne über dem Sparer-Pauschbetrag von 1.000 Euro rund 26 Prozent Abgeltungsteuer. Krypto, das kürzer als ein Jahr gehalten wurde, wird mit dem persönlichen Steuersatz besteuert. Das ist eine Faustregel zur Vorsicht, keine Anlageberatung."]
     }[o.eid];
     return`${head("Erklärt",T[0])}<p>${esc(T[1])}</p>`},
 
@@ -1353,9 +1368,12 @@ const MOMENTE={
   traegt:{t:"Es trägt sich.",x:"Drei Läufe mit Gewinn, kaum eigene Zeit, und einer ganz ohne dich. Das ist eine Nebenexistenz im eigentlichen Sinn. Jetzt kannst du überlegen, es weiterzugeben."},
   exit:{t:"Weitergegeben.",x:"Das Vorhaben gehört jetzt jemand anderem. Im Bild ruht es unten auf dem Boden, es verschwindet nicht."}
 };
-function rahmenOut(){const r=rahmen();
+function rahmenOut(){const r=rahmen(),p=S.prof;
   if(!r.gesetzt) return`<p class="muted small">Sobald du Zahlen einträgst, zeigt die App, wie viel Geld du einsetzen kannst.</p>`;
-  return`<div class="figs"><button class="fig" data-a="explain" data-id="deckel"><span class="k">${r.erstes?"Für das erste Vorhaben":"Je Vorhaben"}</span><span class="v num">bis ${eur(r.deckel)}</span><span class="e">nach ${r.mon} Monaten Notgroschen (${eur(r.notgroschen)})</span></button><div class="fig"><span class="k">Für alle zusammen</span><span class="v num">bis ${eur(r.gesamt)}</span><span class="e">30 Prozent des freien Geldes</span></div><div class="fig"><span class="k">Monatlich frei</span><span class="v num ${r.monat<0?"neg":""}">${eur(r.monat)}</span><span class="e">Netto minus feste Ausgaben</span></div><div class="fig"><span class="k">Gebunden</span><span class="v num">${eur(r.gebunden)}</span><span class="e">in deinen Vorhaben bis zum Start</span></div></div>`;
+  const nicht=[n0(p.krypto)?"Krypto ("+eur(n0(p.krypto))+")":"",p.immo?"das Kapital in deiner Immobilie":""].filter(Boolean);
+  return`<div class="figs"><button class="fig" data-a="explain" data-id="deckel"><span class="k">${r.erstes?"Für das erste Vorhaben":"Je Vorhaben"}</span><span class="v num">bis ${eur(r.deckel)}</span><span class="e">aus freiem Geld von ${eur(r.frei)}</span></button><div class="fig"><span class="k">Für alle zusammen</span><span class="v num">bis ${eur(r.gesamt)}</span><span class="e">Empfehlung, 30 Prozent des freien Geldes</span></div><button class="fig" data-a="explain" data-id="notgroschen"><span class="k">Notgroschen</span><span class="v num">${eur(r.notgroschen)}</span><span class="e">${r.mon} Monate Ausgaben${r.immoPuffer?", 3 Raten Mietausfall":""}${r.wpDeckt?", davon "+eur(r.wpDeckt)+" durch Wertpapiere gedeckt":""}</span></button><div class="fig"><span class="k">Monatlich frei</span><span class="v num ${r.monat<0?"neg":""}">${eur(r.monat)}</span><span class="e">${p.immo?"inklusive Vermietung":"Netto minus feste Ausgaben"}</span></div></div>
+  ${nicht.length?`<p class="muted small">Nicht eingerechnet: ${nicht.join(" und ")}. Das ist Absicht, weil dieses Geld schwankt oder gebunden ist.</p>`:""}
+  ${r.monat<0?`<p class="warn">Dein Monat geht gerade nicht auf. Ein Vorhaben sollte dann klein starten und keine laufenden Zuschüsse brauchen.</p>`:""}`;
 }
 function gewaRows(v){const t=tplOf(v), f=t.f;
   return[
@@ -1402,7 +1420,7 @@ const VSUB={
     ${v.passOk?`<p class="pill ok">Passung bestätigt am ${dateDE(v.passOk)}</p>`:""}
     <div class="wirehead"><span class="eyebrow">Passung zu deinen Werten</span></div>${werteBlock(v)}
     <div class="wirehead"><span class="eyebrow">Nachhaltigkeitsblick</span></div>${bioBlock(v)}
-    ${!v.passOk&&SH.passAsk?`<div class="note"><strong>Mehr Geld als empfohlen.</strong><span>Das Vorhaben braucht etwa ${eur(calc(v).kapital)} bis zum Start. Empfohlen sind ${eur(rahmen().deckel)}. Du kannst trotzdem bestätigen, wenn du das Geld bewusst einplanst und ein Verlust dich nicht belasten würde.</span></div>`:""}
+    ${!v.passOk&&SH.passAsk?`<div class="note"><strong>Mehr Geld als empfohlen.</strong><span>Das Vorhaben braucht etwa ${eur(calc(v).kapital)} bis zum Start. Empfohlen sind ${eur(rahmen().deckel)}, für alle Vorhaben zusammen ${eur(rahmen().gesamt)}. Du kannst trotzdem bestätigen, wenn du das Geld bewusst einplanst und ein Verlust dich nicht belasten würde.</span></div>`:""}
     ${v.passOk?"":`<button class="btn wide" data-a="passOk" data-id="${v.id}">${SH.passAsk?"Ja, bewusst bestätigen":"Passung bestätigen"}</button><p class="muted small">Damit sagst du: Ich habe Rechnung, Geldbedarf und Werte angesehen und will weitermachen.</p>`}
     <button class="btn ghost wide" data-a="auftrag" data-id="${v.id}" data-task="a_kalk">Rechnung von Claude prüfen lassen</button>`},
 
@@ -1606,6 +1624,7 @@ const ACT={
     save();if(SH)closeSheet();render();toast(back?"Beispiel gelöscht. Deine Daten sind zurück.":"Beispiel gelöscht.")},
   beruf:d=>{S.prof.beruf=d.id;save();renderSheet()},
   ust:d=>{S.prof.ust=d.id==="1";save();renderSheet()},
+  immo:d=>{S.prof.immo=d.id==="1";save();renderSheet()},
   profilSave:()=>{if(!S.prof.land||!S.prof.beruf){const b=$("[data-a=profilSave]");b.classList.add("shake");setTimeout(()=>b.classList.remove("shake"),350);buzz("err");toast("Bitte Bundesland und Hauptberuf wählen.");return}save();closeSheet();buzz("ok");toast("Rahmen gespeichert.",null,true)},
   pickTpl:d=>openSheet("name",{tpl:d.id}),
   createV:d=>{const t=VORLAGEN.find(x=>x.id===d.id), nm=($("#f-vname").value||"").trim()||t.n, ds=($("#f-vdesc").value||"").trim();
@@ -1621,9 +1640,8 @@ const ACT={
   passOk:d=>{const v=vById(d.id),r=calc(v),R=rahmen();const no=m=>{const b=$("[data-a=passOk]");if(b){b.classList.add("shake");setTimeout(()=>b.classList.remove("shake"),350)}buzz("err");toast(m)};
     if(!(n0(v.calc.preis)>0&&n0(v.calc.stueck)>0)) return no("Trag zuerst Preis und Stückzahl ein.");
     if(r.gewinn<=0) return no("Die Rechnung zeigt noch keinen Gewinn. Ändere Preis oder Kosten.");
-    if(R.gesetzt&&R.gebunden>R.gesamt&&r.kapital<=R.gesamt) return no("Alle Vorhaben zusammen brauchen mehr als 30 Prozent deines freien Geldes. Fang kleiner an.");
-    if(R.gesetzt&&r.kapital>R.gesamt) return no("Das nötige Geld liegt über 30 Prozent deines freien Geldes. Fang kleiner an oder spar vorher an.");
-    if(R.gesetzt&&r.kapital>R.deckel&&!SH.passAsk){SH.passAsk=true;renderSheet();const b=$("[data-a=passOk]");if(b)b.scrollIntoView({block:"center"});return}
+    if(R.gesetzt&&R.gebunden>R.frei) return no("Dafür müsstest du an deinen Notgroschen oder an verplantes Geld. Fang kleiner an oder spar vorher an.");
+    if(R.gesetzt&&(r.kapital>R.deckel||R.gebunden>R.gesamt)&&!SH.passAsk){SH.passAsk=true;renderSheet();const b=$("[data-a=passOk]");if(b)b.scrollIntoView({block:"center"});return}
     SH.sub="bauteile";v.passOk=today();save();renderSheet();render();buzz("ok");toast("Passung bestätigt.",null,true)},
   cform:d=>{const v=vById(d.vid);v.calc.form=d.id;save();renderSheet()},
   wert:d=>{const v=vById(d.id);v.werte[d.w]=v.werte[d.w]===d.val?undefined:d.val;if(!v.werte[d.w])delete v.werte[d.w];save();renderSheet()},

@@ -305,7 +305,7 @@ const AUFTRAEGE = [
   {id:"a_kaeufer", t:"Verkauf an die Standleitung vorbereiten", out:"exit",
    p:"Ich möchte mein Vorhaben „{name}“ ({vorlage}) an die Person verkaufen, die es bisher für mich führt. Kennzahlen: {rechnung}. Bisherige Läufe: {laeufe}. Preisvorstellung: {preis}. Bereite vor: einen Gesprächsleitfaden, einen fairen Ratenplan (zum Beispiel 30 Prozent Anzahlung, Rest in 12 bis 24 Monatsraten, Eigentumsvorbehalt am Inventar), was ich in einer Übergangssaison an Begleitung anbiete, und ein Starterpaket mit den Pflichtschritten, die die neue Inhaberin selbst erledigen muss."},
   {id:"a_ruecklage", t:"Steuerrücklage berechnen", out:"pass",
-   p:"Ich bin {beruf} und habe nebenher ein Gewerbe „{name}“. Rahmen: {rechnung}. Erkläre grob, wie viel Einkommensteuer auf den Gewinn zusätzlich anfällt, wie die Nachzahlung und die Vorauszahlungen nach der ersten Steuererklärung ablaufen, und wie viel ich pro Monat zurücklegen sollte. Nenne die Annahmen, die du triffst."},
+   p:"Ich bin {beruf}{immo} und habe nebenher ein Gewerbe „{name}“. Rahmen: {rechnung}. Erkläre grob, wie viel Einkommensteuer auf den Gewinn zusätzlich anfällt, wie die Nachzahlung und die Vorauszahlungen nach der ersten Steuererklärung ablaufen, und wie viel ich pro Monat zurücklegen sollte. Nenne die Annahmen, die du triffst."},
   {id:"a_liefer", t:"Lieferanten anfragen", out:"prod",
    p:"Ich brauche für mein Vorhaben „{name}“ ({desc}) Material oder Ware in kleinen Mengen. Rahmen: {rechnung}. Finde 5 bis 8 Lieferanten in Deutschland, möglichst regional und nachhaltig, mit Mindestmengen und ungefähren Preisen. Schreib dazu eine kurze Anfrage, die ich an alle schicken kann."}
 ];
