@@ -766,7 +766,7 @@ const LEBEN_IMPULSE = [
 ];
 
 /* ===== Nebenexistenz · Logik ===== */
-const BUILD="20.10.2026, 13:07";
+const BUILD="20.10.2026, 13:22";
 const KEY="nebenexistenz-v1";
 const GV=5;
 const MAX_AKTIV=3;
@@ -1287,8 +1287,8 @@ function renderSheet(first){
 const head=(ey,t,c)=>`<div class="shead"><div class="grow"><p class="eyebrow"><span class="knot" style="--c:${c||"var(--neben)"}"></span>${esc(ey)}</p><h2>${esc(t)}</h2></div><button class="closebtn" data-a="close">${STACK.length?"Zurück":"Schließen"}</button></div>`;
 
 const SHEETS={
-  welcome(){return`${head("Willkommen","Eine Nebenexistenz, die neben dem Leben bleibt")}
-    <p>Die App hilft dir, nebenher kleine, legale Gewerbe aufzubauen, die andere für dich führen. Du steuerst, die Arbeit verteilt sich.</p>
+  welcome(){return`${head("Willkommen","Ein kleines Gewerbe, das zu deinem Leben passt")}
+    <p>Die Nachbarin betreut den Stand, der Laden um die Ecke verkauft deine Ware, und du entscheidest am Küchentisch. Für Anmeldungen und Steuer bereitet die App alles vor.</p>
     <div class="timeline"><div class="tl on"><span class="t">Rahmen festlegen</span><span class="muted small">Bundesland, Hauptberuf, Geld und Zeit. Daraus folgen Pflichten und wie viel Geld du einsetzen kannst.</span></div>
     <div class="tl on"><span class="t">Vorhaben aufhängen</span><span class="muted small">Jedes Vorhaben wächst in sieben Bauteilen: wählen, prüfen, ausgestalten, anmelden, erproben, übertragen, tragen. Anmeldungen und Formulare sind vorbereitet, Recherchen und Texte übernimmt Claude per Knopfdruck.</span></div>
     <div class="tl on"><span class="t">Weitergeben</span><span class="muted small">Wenn ein Vorhaben sich trägt, schlägt die App vor, es zu verkaufen. Es bleibt im Bild sichtbar.</span></div></div>
