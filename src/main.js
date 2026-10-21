@@ -164,7 +164,7 @@ function lifeShare(){const r=S.people.filter(p=>n0(p.rhythm)>0);if(!r.length)ret
 function bdayIn(p){if(!p.bday)return null;const [m,d]=p.bday.split("-").map(Number);if(!m||!d)return null;
   const t=new Date(today()+"T12:00"),y=t.getFullYear();let x=new Date(y,m-1,d,12);if(x<t)x=new Date(y+1,m-1,d,12);return Math.round((x-t)/864e5)}
 function freieTage(n){const out=[],t=new Date(today()+"T12:00");
-  for(let i=1;i<=21&&out.length<n;i++){const x=new Date(t);x.setDate(t.getDate()+i);if(!S.prof.tage.includes(x.getDay()))out.push(x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"))}
+  for(let i=0;i<=21&&out.length<n;i++){const x=new Date(t);x.setDate(t.getDate()+i);if(!S.prof.tage.includes(x.getDay()))out.push(x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"))}
   return out}
 function isoWeek(){const d=new Date(today()+"T12:00");d.setDate(d.getDate()+3-((d.getDay()+6)%7));const w1=new Date(d.getFullYear(),0,4);return d.getFullYear()+"-"+(1+Math.round(((d-w1)/864e5-3+((w1.getDay()+6)%7))/7))}
 function altPerson(){const o=S.people.filter(p=>overdue(p,2));if(!o.length)return null;const wk=isoWeek();
@@ -181,6 +181,9 @@ function balance(){
 const isVorhabentag=()=>S.prof.tage.includes(new Date().getDay())||S.firstDay===today();
 
 /* ---------- Nächster Schritt ---------- */
+function kuerzel(list){const nm=list.map(p=>p.name.trim());
+  return nm.map((n,i)=>{for(let k=1;k<=3;k++){const c=n.slice(0,k).toLowerCase();if(nm.filter(m=>m.slice(0,k).toLowerCase()===c).length<2)return n.slice(0,1).toUpperCase()+n.slice(1,k).toLowerCase()}
+    return n.slice(0,1).toUpperCase()+(i+1)})}
 function lifePick(){
   const c=S.people.filter(p=>p.last!==today());if(!c.length)return null;
   const sc=p=>n0(p.rhythm)>0?since(p)/n0(p.rhythm):Math.min(since(p),60)/60*0.8;
@@ -198,7 +201,7 @@ function bdayStep(){
   const p=S.people.filter(p=>{const n=bdayIn(p);return n!=null&&n<=3&&(S.bdayOk||{})[p.id]!==y+"-"+p.bday}).sort((a,b)=>bdayIn(a)-bdayIn(b))[0];
   if(!p)return null;const n=bdayIn(p);
   const wann=n===0?"heute":n===1?"morgen":n===2?"übermorgen":"am "+WTL[(new Date().getDay()+n)%7];
-  return{tone:"var(--leben)",ey:"Leben · Geburtstag",t:p.name+" hat "+wann+" Geburtstag.",x:"Magst du dir etwas überlegen?",btns:[{l:"Verabredung vorschlagen",a:"plan",id:p.id,c:"leben"},{l:"Gut, danke",a:"bdayOk",id:p.id,c:"ghost"}]};
+  return{tone:"var(--leben)",ey:"Leben · Geburtstag",t:p.name+" hat "+wann+" Geburtstag.",x:"Magst du dir etwas überlegen? Danach geht es mit deinem nächsten Schritt weiter.",btns:[{l:"Verabredung vorschlagen",a:"plan",id:p.id,c:"leben"},{l:"Gut, danke",a:"bdayOk",id:p.id,c:"ghost"}]};
 }
 function ventureStep(v){
   const n=stage(v), t=tplOf(v), bt=BAUTEILE[n];
@@ -223,7 +226,7 @@ function nextStep(){
   const p=S.prof;
   if(!p.land||!p.beruf) return{tone:"var(--neben)",ey:"Anfang",t:"Deinen Rahmen festlegen",x:"Bundesland, Hauptberuf, Geld und Zeit. Daraus leitet die App ab, welche Schritte nötig sind und wie viel du einsetzen kannst.",btns:[{l:"Rahmen festlegen",a:"sheet",id:"profil"}]};
   const bs=bdayStep(); if(bs) return bs;
-  if(S.lifeFocus&&S.lifeFocus.d===today()) return lifeStep("Heute ist Zeit für das Leben.",S.lifeFocus.id);
+  if(S.lifeFocus&&S.lifeFocus.d===today()){const st=lifeStep("Heute ist Zeit für das Leben.",S.lifeFocus.id);st.btns=st.btns.filter(b=>b.a!=="later");st.btns.push({l:"Doch zu den Vorhaben",a:"focusOff",c:"ghost"});return st}
   if(new Date().getDay()===0&&!(S.weeks.length&&dayDiff(S.weeks[S.weeks.length-1].d,today())<6))
     return{tone:"var(--sinn)",ey:"Wochenblick",t:"Wie war die Woche?",x:"Drei kurze Fragen: mit wem du Zeit hattest, ob die Vorhaben Kraft gegeben oder genommen haben, und was du weglässt.",btns:[{l:"Wochenblick",a:"sheet",id:"week",c:"sinn"}]};
   if(!isVorhabentag()&&S.override!==today()){
@@ -314,13 +317,15 @@ function mobileSVG(){
   s+=`<text x="56" y="150" text-anchor="middle" font-family="var(--f-mono)" font-size="11" fill="var(--on)" letter-spacing=".06em">LEBEN</text></g>`;
   const ppl=S.people.slice(0,6);
   if(ppl.length){
-    s+=`<line x1="56" y1="174" x2="56" y2="194" stroke="${W}" stroke-width="1.5"/><path d="M12 196 Q56 190 112 196" fill="none" stroke="${W}" stroke-width="1.5"/><circle cx="56" cy="193" r="2.2" fill="${W}"/>`;
+    const x0=ppl.length<=3?26:10, x1=ppl.length<=3?86:140;
+    s+=`<line x1="56" y1="174" x2="56" y2="194" stroke="${W}" stroke-width="1.5"/><path d="M${x0-4} 196 Q56 190 ${x1+4} 196" fill="none" stroke="${W}" stroke-width="1.5"/><circle cx="56" cy="193" r="2.2" fill="${W}"/>`;
+    const kz=kuerzel(ppl);
     ppl.forEach((p,i)=>{
-      const x=ppl.length===1?56:16+i*(92/(ppl.length-1)), y=222+((i%2)*16), r=10, od=overdue(p); maxY=Math.max(maxY,y+r);
+      const x=ppl.length===1?56:x0+i*((x1-x0)/(ppl.length-1)), y=222+((i%2)*16), r=11, od=overdue(p); maxY=Math.max(maxY,y+r);
       s+=`<g class="mob-hit" data-a="person" data-id="${p.id}" tabindex="0" role="button" aria-label="${esc(p.name)}${od?", länger nicht gesehen":""}">`;
-      s+=`<circle cx="${x.toFixed(1)}" cy="${y}" r="20" fill="transparent"/><line x1="${x.toFixed(1)}" y1="195" x2="${x.toFixed(1)}" y2="${y-r}" stroke="${W}" stroke-width="1.2"/>`;
+      s+=`<rect x="${(x-13).toFixed(1)}" y="200" width="26" height="${y+r+8-200}" fill="transparent"/><line x1="${x.toFixed(1)}" y1="195" x2="${x.toFixed(1)}" y2="${y-r}" stroke="${W}" stroke-width="1.2"/>`;
       s+=od?`<circle cx="${x.toFixed(1)}" cy="${y}" r="${r}" fill="var(--bg)" stroke="var(--leben)" stroke-width="1.5" stroke-dasharray="3 2.5"/>`:`<circle cx="${x.toFixed(1)}" cy="${y}" r="${r}" fill="var(--leben)"/>`;
-      s+=`<text x="${x.toFixed(1)}" y="${y+4}" text-anchor="middle" font-family="var(--f-ui)" font-weight="700" font-size="11" fill="${od?"var(--leben)":"var(--on)"}">${esc(p.name.slice(0,1).toUpperCase())}</text></g>`;
+      s+=`<text x="${x.toFixed(1)}" y="${y+4}" text-anchor="middle" font-family="var(--f-ui)" font-weight="700" font-size="${kz[i].length>2?8.5:kz[i].length>1?10:11}" fill="${od?"var(--leben)":"var(--on)"}">${esc(kz[i])}</text></g>`;
     });
   }
   /* Vorhaben-Seite */
@@ -668,14 +673,15 @@ const SHEETS={
   plan(o){const p=S.people.find(x=>x.id===o.pid);if(!p)return"";const tage=freieTage(3);const day=SH.day||tage[0];const idee=SH.idee||0;
     const IDEEN=[["Spaziergang","Lust auf einen Spaziergang"],["Kaffee","Lust auf einen Kaffee"],["Essen","Lust, zusammen zu essen"],["Telefonat","Zeit zum Telefonieren"]];
     const dd=new Date(day+"T12:00"), wt=WTL[dd.getDay()], dm=String(dd.getDate()).padStart(2,"0")+"."+String(dd.getMonth()+1).padStart(2,"0")+".";
-    const txt="Hallo "+p.name+", hast du am "+wt+", "+dm+", "+IDEEN[idee][1]+"?";
+    const txt=day===today()?"Hallo "+p.name+", hast du heute "+IDEEN[idee][1]+"?":"Hallo "+p.name+", hast du am "+wt+", "+dm+", "+IDEEN[idee][1]+"?";
     const g="https://calendar.google.com/calendar/render?action=TEMPLATE&text="+encodeURIComponent("Zeit mit "+p.name)+"&dates="+day.replace(/-/g,"")+"/"+nextDay(day).replace(/-/g,"");
     return`${head("Verabredung","Zeit mit "+p.name,"var(--leben)")}
-    <div class="field"><span class="lab">Diese Tage sind frei von Vorhaben</span><div class="chips">${tage.map(t=>{const x=new Date(t+"T12:00");return`<button class="chip" data-a="pday" data-id="${t}" data-key="pd${t}" aria-pressed="${t===day}" style="--c:var(--leben)">${WT[x.getDay()]} ${x.getDate()}.${x.getMonth()+1}.</button>`}).join("")}</div></div>
+    <div class="field"><span class="lab">Diese Tage sind frei von Vorhaben</span><div class="chips">${tage.map(t=>{const x=new Date(t+"T12:00");return`<button class="chip" data-a="pday" data-id="${t}" data-key="pd${t}" aria-pressed="${t===day}" style="--c:var(--leben)">${t===today()?"heute":WT[x.getDay()]+" "+x.getDate()+"."+(x.getMonth()+1)+"."}</button>`}).join("")}</div></div>
     <div class="field"><span class="lab">Was passt?</span><div class="chips">${IDEEN.map(([l],i)=>`<button class="chip" data-a="pidee" data-id="${i}" data-key="pi${i}" aria-pressed="${i===idee}" style="--c:var(--leben)">${l}</button>`).join("")}</div></div>
     <div class="field"><label for="pl-t">Nachricht zum Kopieren</label><textarea id="pl-t">${esc(txt)}</textarea></div>
     <div class="chips"><button class="btn leben" data-a="copy" data-src="pl-t">Nachricht kopieren</button><a class="btn ghost" href="${esc(g)}" target="_blank" rel="noopener">In Google Kalender</a>${IN_FRAME?"":`<button class="btn ghost" data-a="ics" data-id="${p.id}" data-day="${day}">Kalenderdatei</button>`}</div>
-    <p class="hint">Die App verschickt nichts und merkt sich nicht, ob ihr euch trefft.</p>`},
+    <p class="hint">Die App verschickt nichts und merkt sich nicht, ob ihr euch trefft.</p>
+    ${o.queue&&o.queue.length?`<button class="btn wide ghost" data-a="planNext">Weiter: Zeit mit ${esc((S.people.find(x=>x.id===o.queue[0])||{}).name||"")}</button>`:""}`},
 
   werte(){return`${head("Werte","Deine Werte","var(--sinn)")}
     <p class="muted small">Bis zu fünf Werte. Jedes Vorhaben fragt dich, ob es zu ihnen passt. Wenn du das Wertegerüst nutzt, trag hier deine Stützen ein.</p>
@@ -1047,7 +1053,8 @@ const ACT={
   sub:d=>{SH.sub=d.id;SH.art=null;renderSheet()},
   auftrag:d=>openSheet("auftrag",{vid:d.id,task:d.task,duty:d.duty||""}),
   explain:d=>openSheet("explain",{eid:d.id}),
-  later:()=>{S.lifeLater=today();save();render()},
+  later:()=>{S.lifeLater=today();S.lifeFocus=null;save();render()},
+  focusOff:()=>{S.lifeFocus=null;save();render()},
   override:()=>{S.override=today();save();render();toast("Für heute zeigt die App auch Schritte für die Vorhaben. Morgen gilt wieder dein Rahmen.")},
   seen:d=>{const p=S.people.find(x=>x.id===d.id);if(!p)return;const sn=snapshot();p.last=today();if(S.lifeFocus&&S.lifeFocus.id===p.id)S.lifeFocus=null;save();render();if(SH)renderSheet();buzz("ok");toast("Schön. "+p.name+" ist eingetragen.",sn,true)},
   hintOff:d=>{S.hintsOff[d.id]=1;S.hint={d:today(),id:"",done:1};save();render()},
@@ -1120,11 +1127,12 @@ const ACT={
   saveWeek:()=>{const w=SH.w;keepWeek();w.mit.forEach(id=>{const p=S.people.find(x=>x.id===id);if(p&&(!p.last||p.last<today()))p.last=today()});
     if(w.mom&&w.mom.trim()){const m={id:uid(),d:today(),text:w.mom.trim()};const p=S.people.find(x=>x.id===w.mp);if(p){p.moments=p.moments||[];p.moments.push(m)}else{S.momente=S.momente||[];S.momente.push(m)}}
     S.weeks.push({d:today(),kraft:w.kraft,weg:w.weg,mit:w.mit,wen:w.wen});save();buzz("ok");
-    if(w.wen.length){openSheet("plan",{pid:w.wen[0]},true);toast("Wochenblick gespeichert.",null,true);return}
+    if(w.wen.length){openSheet("plan",{pid:w.wen[0],queue:w.wen.slice(1)},true);toast("Wochenblick gespeichert.",null,true);return}
     closeSheet();toast(w.kraft==="nahm"?"Notiert. Vielleicht ist ein Vorhaben reif zum Weitergeben.":"Wochenblick gespeichert.",null,true)},
   person:d=>openSheet("person",{pid:d.id}),
   plan:d=>openSheet("plan",{pid:d.id}),
   pday:d=>{SH.day=d.id;renderSheet()},
+  planNext:()=>{const q=SH.queue.slice();const pid=q.shift();openSheet("plan",{pid,queue:q},true)},
   pidee:d=>{SH.idee=+d.id;renderSheet()},
   prhythm:d=>{const p=S.people.find(x=>x.id===d.id);p.rhythm=+d.val;save();renderSheet();render()},
   addMoment:d=>{const p=S.people.find(x=>x.id===d.id),t=($("#pm-t").value||"").trim();if(!t)return;p.moments=p.moments||[];p.moments.push({id:uid(),d:today(),text:t});save();renderSheet();buzz("ok");toast("Festgehalten.",null,true)},
