@@ -769,7 +769,7 @@ const LEBEN_IMPULSE = [
 ];
 
 /* ===== Nebenexistenz · Logik ===== */
-const BUILD="21.10.2026, 12:21";
+const BUILD="21.10.2026, 12:25";
 const KEY="nebenexistenz-v1";
 const GV=6;
 const MAX_AKTIV=3;
@@ -780,7 +780,7 @@ function fresh(){return{
   gv:GV, onb:false, demo:false,
   prof:{land:"", ort:"", beruf:"", netto:0, fix:0, ruecklage:0, stunden:4, tage:[2,6]},
   pduties:{}, werte:[], people:[], ventures:[], time:[], weeks:[],
-  settings:{theme:"auto", vib:true, apps:{wg:"https://wurstgott.github.io/fernweh/wertegeruest/", bt:"https://wurstgott.github.io/biotop/", gk:"https://wurstgott.github.io/fernweh/glueckskompass/"}},
+  settings:{theme:"auto", vib:true, rem:{home:false,badge:false}, apps:{wg:"https://wurstgott.github.io/fernweh/wertegeruest/", bt:"https://wurstgott.github.io/biotop/", gk:"https://wurstgott.github.io/fernweh/glueckskompass/"}},
   lv:{}, fresh:[], seen:{}, mq:[], hint:{d:"",id:""}, hintsOff:{}, opens:{d:"",n:0}, override:"", tab:"home"
 }}
 let S=fresh();
@@ -1173,6 +1173,7 @@ function viewHome(){
   let s=`<h1 class="vh">Nebenexistenz</h1><div class="stage">${mobileSVG()}</div>${balanceLine()}`;
   if(S.demo) s+=`<div class="banner"><span>Du siehst Beispieldaten.</span><button class="btn small ghost" data-a="demoOff">Beispiel löschen</button></div>`;
   s+=stepCard(st);
+  s+=remBox();
   if(!isVorhabentag()&&S.override!==today()){
     s+=`<p class="muted small" style="text-align:center;margin-top:18px">Heute ist kein Vorhabentag, deshalb schlägt die App hier keine Arbeit vor. Planen, nachsehen und neue Vorhaben anlegen kannst du jederzeit unter „Vorhaben“.</p>`;
     return s+foot();
@@ -1257,7 +1258,7 @@ function viewAmt(){
 }
 function dutyRow(v,d,showName){
   const on=dutyDone(v,d), key="d-"+v.id+"-"+d.id;
-  return`<div class="duty"><button class="check" data-a="duty" data-id="${v.id}" data-duty="${d.id}" aria-pressed="${on}" aria-label="${esc(d.t)} erledigt">${ICON.check}</button><div><p class="wer">${esc(fill(d.wer,v))}${showName?" · "+esc(v.name):""}</p><p class="t">${esc(d.t)}${!on&&isPending(v,d)?` <span class="pill info">wartet seit ${dateDE(v.pending[d.id])}</span>`:""}</p></div>
+  return`<div class="duty"><button class="check" data-a="duty" data-id="${v.id}" data-duty="${d.id}" aria-pressed="${on}" aria-label="${esc(d.t)} erledigt">${ICON.check}</button><div><p class="wer">${esc(fill(d.wer,v))}${showName?" · "+esc(v.name):""}</p><p class="t">${esc(d.t)}${!on&&isPending(v,d)?` <span class="pill info">wartet seit ${dateDE(v.pending[d.id])}</span>${remOn()&&!(S.reminders||[]).some(r=>r.duty===v.id+d.id)?` <button class="linkbtn" style="min-height:0;padding:0;font-size:13px" data-a="remDuty" data-id="${v.id}" data-duty="${d.id}">In zwei Wochen nachfragen</button>`:""}`:""}</p></div>
   <details data-key="${key}" ${OPEN.has(key)?"open":""}><summary>Warum und wie</summary><p>${esc(fill(d.x,v))}</p><p style="margin-top:6px"><strong>So geht’s:</strong> ${esc(fill(d.wie,v))}</p><div class="acts">${d.link&&fill(d.link,v)?`<a class="linkbtn" href="${esc(fill(d.link,v))}" target="_blank" rel="noopener">${esc(fill(d.link,v).replace(/^https:\/\//,"").split("/")[0])}</a>`:""}${d.auftrag?`<button class="btn small ghost" data-a="auftrag" data-id="${v.id}" data-task="${d.auftrag}">Claude beauftragen</button>`:""}${!d.auftrag&&!NOASK.has(fill(d.wer,v))?`<button class="btn small ghost" data-a="auftrag" data-id="${v.id}" data-task="a_anfrage" data-duty="${d.id}">Anfrage vorbereiten</button>`:""}${d.form?`<button class="btn small ghost" data-a="sheet" data-id="form" data-form="${d.form}" data-vid="${v.id}">Formularwerte</button>`:""}</div>${!on&&d.w==="vor"&&!PERSON.has(d.id)?`<div class="acts"><button class="linkbtn" data-a="pend" data-id="${v.id}" data-duty="${d.id}">${isPending(v,d)?"Doch noch nicht beantragt":"Beantragt, warte auf Antwort"}</button></div>`:""}${on?`<p class="mono" style="margin-top:6px">erledigt am ${dateDE(PERSON.has(d.id)?S.pduties[d.id]:v.duties[d.id])}</p>`:""}</details></div>`;
 }
 const OPEN=new Set();
@@ -1275,6 +1276,7 @@ function viewLeben(){
   s+=`<div class="sec"><div class="chips"><button class="btn sinn" data-a="sheet" data-id="week">Wochenblick</button><button class="btn ghost" data-a="sheet" data-id="time">Vorhabenzeit eintragen</button></div>${S.weeks.length?`<p class="muted small">Letzter Wochenblick ${agoTxt(S.weeks[S.weeks.length-1].d)}: ${esc({gab:"Die Vorhaben haben Kraft gegeben.",neutral:"Weder noch.",nahm:"Die Vorhaben haben Kraft genommen."}[S.weeks[S.weeks.length-1].kraft]||"")}${S.weeks[S.weeks.length-1].weg?" Weglassen: „"+esc(S.weeks[S.weeks.length-1].weg)+"“":""}</p>`:""}</div>`;
   s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Deine Werte</span></div>${S.werte.length?`<div class="chips">${S.werte.map(w=>`<span class="pill ok">${esc(w)}</span>`).join("")}</div>`:`<p class="muted small">Noch keine. Trag bis zu fünf Werte ein, zum Beispiel aus deinem Wertegerüst.</p>`}<div><button class="btn small ghost" data-a="sheet" data-id="werte">Werte eintragen</button></div></div>`;
   s+=appLinks();
+  s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Erinnerungen</span></div>${remOn()?`${(S.reminders||[]).length?`<div class="list">${S.reminders.slice().sort((a,b)=>a.d<b.d?-1:1).map(r=>`<div class="li" style="cursor:default"><span class="grow"><span class="t">${esc(r.t)}</span><span class="s">${dateDE(r.d)}</span></span><button class="btn small ghost" data-a="remDone" data-id="${r.id}">Löschen</button></div>`).join("")}</div>`:`<p class="muted small">Noch keine eigenen Erinnerungen. Geburtstage erscheinen von selbst, sobald du sie bei einem Menschen einträgst.</p>`}<div><button class="btn small ghost" data-a="sheet" data-id="rem">Erinnerung anlegen</button></div>`:`<p class="muted small">Erinnerungen sind aus. Wenn du möchtest, schaltest du sie in den Einstellungen ein. Dann zeigt die App Geburtstage und eigene Erinnerungen auf der Startseite.</p><div><button class="btn small ghost" data-a="sheet" data-id="settings">Zu den Einstellungen</button></div>`}</div>`;
   s+=wissenHTML("leben","Warum die Lebensseite schwerer wiegt");
   return s+foot();
 }
@@ -1433,13 +1435,20 @@ const SHEETS={
     <div class="stack"><button class="btn wide leben" data-a="seen" data-id="${p.id}" ${p.last===today()?"disabled":""}>${p.last===today()?"Heute eingetragen":"Wir hatten heute Zeit"}</button><button class="btn wide ghost" data-a="plan" data-id="${p.id}">Verabredung vorschlagen</button></div>
     ${p.last?`<p class="hint">Zuletzt eingetragen am ${dateDE(p.last)}.</p>`:""}
     <div class="field"><span class="lab">Wie oft siehst du ${esc(p.name)} gern?</span><div class="chips">${RHYTHMEN.map(([d,l])=>`<button class="chip" data-a="prhythm" data-id="${p.id}" data-val="${d}" data-key="rh${d}" aria-pressed="${n0(p.rhythm)===d}" style="--c:var(--leben)">${l}</button>`).join("")}</div><span class="hint">Nur ein Wunsch. Ist es deutlich länger her, wird die Scheibe im Mobile blass. Mehr passiert nicht.</span></div>
-    <div class="field"><span class="lab">Geburtstag (optional, ohne Jahr)</span><div class="grid2"><select id="pb-d" data-a-change="pbday" aria-label="Tag"><option value="">Tag</option>${Array.from({length:31},(_,i)=>`<option value="${String(i+1).padStart(2,"0")}" ${bm[1]===String(i+1).padStart(2,"0")?"selected":""}>${i+1}.</option>`).join("")}</select><select id="pb-m" aria-label="Monat"><option value="">Monat</option>${MON.map((m,i)=>`<option value="${String(i+1).padStart(2,"0")}" ${bm[0]===String(i+1).padStart(2,"0")?"selected":""}>${m}</option>`).join("")}</select></div><span class="hint">Drei Tage vorher erinnert dich die App einmal daran.</span></div>
+    <div class="field"><span class="lab">Geburtstag (optional, ohne Jahr)</span><div class="grid2"><select id="pb-d" data-a-change="pbday" aria-label="Tag"><option value="">Tag</option>${Array.from({length:31},(_,i)=>`<option value="${String(i+1).padStart(2,"0")}" ${bm[1]===String(i+1).padStart(2,"0")?"selected":""}>${i+1}.</option>`).join("")}</select><select id="pb-m" aria-label="Monat"><option value="">Monat</option>${MON.map((m,i)=>`<option value="${String(i+1).padStart(2,"0")}" ${bm[0]===String(i+1).padStart(2,"0")?"selected":""}>${m}</option>`).join("")}</select></div><span class="hint">Drei Tage vorher erinnert dich die App einmal daran.</span>${p.bday?`<div class="chips"><a class="btn small ghost" href="${esc(gcalLink("Geburtstag "+p.name,nextBdayIso(p),true))}" target="_blank" rel="noopener">Jährlich in Google Kalender</a>${IN_FRAME?"":`<button class="btn small ghost" data-a="icsBday" data-id="${p.id}">Kalenderdatei</button>`}</div>`:""}</div>
     <div class="wirehead"><span class="eyebrow">Schöne Momente</span></div>
     ${(p.moments||[]).slice().reverse().map(m=>`<div class="formrow"><div><p class="k">${dateDE(m.d)}</p><p class="v">„${esc(m.text)}“</p></div><button class="btn small ghost" data-a="delMoment" data-id="${p.id}" data-mid="${m.id}" aria-label="Moment löschen">Löschen</button></div>`).join("")}
     <div class="field"><label for="pm-t">Etwas, das du festhalten möchtest (optional)</label><textarea id="pm-t" maxlength="280" placeholder="zum Beispiel: Am See, endlich mal wieder richtig gelacht."></textarea><span class="hint">Bleibt nur auf diesem Gerät. Ab und zu erinnert dich die App auf der Lebensseite an einen solchen Moment.</span></div>
     <button class="btn wide ghost" data-a="addMoment" data-id="${p.id}">Festhalten</button>
     <button class="linkbtn" data-a="delPerson" data-id="${p.id}">${esc(p.name)} aus der Liste entfernen</button>`},
 
+  rem(o){const d=SH.rd||nextDay(today());
+    return`${head("Erinnerung","Erinnerung anlegen","var(--leben)")}
+    <div class="field"><label for="r-t">Woran?</label><input id="r-t" type="text" maxlength="80" value="${esc(SH.rt||"")}" placeholder="zum Beispiel: Ali wegen Umzug fragen"></div>
+    <div class="field"><label for="r-dd">Wann?</label><input id="r-dd" type="date" value="${d}"></div>
+    <button class="btn wide leben" data-a="remSave">Merken</button>
+    <p class="hint">Die Erinnerung erscheint auf deiner Startseite, wenn du die App öffnest. Damit sie dich auch erreicht, wenn die App zu ist, trag sie zusätzlich in deinen Kalender ein.</p>
+    <div class="chips"><button class="btn small ghost" data-a="remGcal">In Google Kalender</button>${IN_FRAME?"":`<button class="btn small ghost" data-a="remIcs">Kalenderdatei</button>`}</div>`},
   plan(o){const p=S.people.find(x=>x.id===o.pid);if(!p)return"";const tage=freieTage(3);const day=SH.day||tage[0];const idee=SH.idee||0;
     const IDEEN=[["Spaziergang","Lust auf einen Spaziergang"],["Kaffee","Lust auf einen Kaffee"],["Essen","Lust, zusammen zu essen"],["Telefonat","Zeit zum Telefonieren"]];
     const dd=new Date(day+"T12:00"), wt=WTL[dd.getDay()], dm=String(dd.getDate()).padStart(2,"0")+"."+String(dd.getMonth()+1).padStart(2,"0")+".";
@@ -1450,6 +1459,7 @@ const SHEETS={
     <div class="field"><span class="lab">Was passt?</span><div class="chips">${IDEEN.map(([l],i)=>`<button class="chip" data-a="pidee" data-id="${i}" data-key="pi${i}" aria-pressed="${i===idee}" style="--c:var(--leben)">${l}</button>`).join("")}</div></div>
     <div class="field"><label for="pl-t">Nachricht zum Kopieren</label><textarea id="pl-t">${esc(txt)}</textarea></div>
     <div class="chips"><button class="btn leben" data-a="copy" data-src="pl-t">Nachricht kopieren</button><a class="btn ghost" href="${esc(g)}" target="_blank" rel="noopener">In Google Kalender</a>${IN_FRAME?"":`<button class="btn ghost" data-a="ics" data-id="${p.id}" data-day="${day}">Kalenderdatei</button>`}</div>
+    ${remOn()?`<button class="btn wide ghost" data-a="planMerk" data-id="${p.id}" data-day="${day}" data-t="${esc("Zeit mit "+p.name+": "+IDEEN[idee][0])}">Auf der Startseite vormerken</button>`:""}
     <p class="hint">Die App verschickt nichts und merkt sich nicht, ob ihr euch trefft.</p>
     ${o.queue&&o.queue.length?`<button class="btn wide ghost" data-a="planNext">Weiter: Zeit mit ${esc((S.people.find(x=>x.id===o.queue[0])||{}).name||"")}</button>`:""}`},
 
@@ -1489,6 +1499,12 @@ const SHEETS={
   settings(){const st=S.settings;
     return`${head("Einstellungen","Einstellungen")}
     <div class="field"><span class="lab">Darstellung</span><div class="chips">${[["auto","Wie das Gerät"],["light","Hell"],["dark","Dunkel"]].map(([k,l])=>`<button class="chip" data-a="theme" data-id="${k}" data-key="th${k}" aria-pressed="${st.theme===k}">${l}</button>`).join("")}</div></div>
+    <div class="field"><span class="lab">Erinnerungen</span><p class="hint">Standardmäßig meldet sich die App nie von selbst. Hier kannst du Erinnerungen einschalten. Eine Web-App kann sich nicht melden, solange sie geschlossen ist. Zuverlässig zur richtigen Zeit erinnert dich nur dein Kalender.</p>
+      <div class="stack">
+      <button class="opt" data-a="remHome" aria-pressed="${!!st.rem.home}"><span class="ot">Auf der Startseite</span><span class="ox">Ein kleiner Kasten „Bald“ zeigt Geburtstage und deine Erinnerungen der nächsten sieben Tage, wenn du die App öffnest.</span></button>
+      <button class="opt" data-a="remBadge" aria-pressed="${!!st.rem.badge}"><span class="ot">Zahl am App-Symbol</span><span class="ox">Liegt die App auf dem Home-Bildschirm, zeigt ihr Symbol eine kleine Zahl, wenn heute oder morgen etwas ansteht. Auf dem iPhone fragt das System dafür nach der Erlaubnis für Mitteilungen. Die Zahl aktualisiert sich, wenn du die App öffnest.</span></button>
+      </div>
+      ${S.people.some(p=>p.bday)?`<div class="chips">${IN_FRAME?"":`<button class="btn small ghost" data-a="icsBdays">Alle Geburtstage als Kalenderdatei</button>`}</div><p class="hint">Jährliche Termine mit Erinnerung am Vortag. ${IN_FRAME?"Kalenderdateien gehen nur in der installierten App. ":""}Für Google Kalender findest du bei jedem Menschen einen eigenen Knopf.</p>`:""}</div>
     <div class="field"><span class="lab">Vibration beim Tippen</span><div class="chips"><button class="chip" data-a="vib" data-key="vib" aria-pressed="${st.vib}">${st.vib?"An":"Aus"}</button></div></div>
     <div class="stack"><button class="btn ghost" data-a="sheet" data-id="profil">Rahmen bearbeiten</button><button class="btn ghost" data-a="sheet" data-id="people">Menschen bearbeiten</button><button class="btn ghost" data-a="sheet" data-id="werte">Werte bearbeiten</button></div>
     <div class="wirehead"><span class="eyebrow">Adressen deiner anderen Apps</span></div>
@@ -1720,7 +1736,7 @@ function bioBlock(v){
 
 /* ---------- Hauptansicht ---------- */
 const TABS=[["home","Mobile"],["vorhaben","Vorhaben"],["amt","Ämter"],["leben","Leben"]];
-function render(){
+function render(){ setTimeout(updBadge,0);
   const main=$("#main");
   const v={home:viewHome,vorhaben:viewVorhaben,amt:viewAmt,leben:viewLeben}[S.tab]||viewHome;
   main.innerHTML=v();
@@ -1902,6 +1918,22 @@ const ACT={
   person:d=>openSheet("person",{pid:d.id}),
   plan:d=>openSheet("plan",{pid:d.id}),
   pday:d=>{SH.day=d.id;renderSheet()},
+  remHome:()=>{S.settings.rem.home=!S.settings.rem.home;save();renderSheet();render()},
+  remBadge:()=>{const r=S.settings.rem;if(r.badge){r.badge=false;save();updBadge();renderSheet();return}
+    if(!("setAppBadge" in navigator)){toast("Das geht nur, wenn die App auf dem Home-Bildschirm liegt.");return}
+    const go=()=>{r.badge=true;save();updBadge();renderSheet();toast("Die Zahl am Symbol ist eingeschaltet.",null,true)};
+    try{if(window.Notification&&Notification.permission!=="granted"){Notification.requestPermission().then(x=>{if(x==="granted")go();else toast("Ohne Erlaubnis für Mitteilungen zeigt das iPhone keine Zahl am Symbol.")})}else go()}catch(e){go()}},
+  remSave:()=>{const t=($("#r-t").value||"").trim(),d=$("#r-dd").value;if(!t||!d){buzz("err");toast("Bitte Text und Datum eintragen.");return}
+    S.reminders=S.reminders||[];S.reminders.push({id:uid(),d,t});save();closeSheet();buzz("ok");toast("Gemerkt.",null,true)},
+  remGcal:()=>{const t=($("#r-t").value||"").trim()||"Erinnerung",d=$("#r-dd").value||nextDay(today());window.open(gcalLink(t,d,false),"_blank","noopener")},
+  remIcs:()=>{const t=($("#r-t").value||"").trim()||"Erinnerung",d=$("#r-dd").value||nextDay(today());icsSave("erinnerung",icsWrap([icsEvent({t,d,alarm:true})]))},
+  remDone:d=>{const sn=snapshot();S.reminders=(S.reminders||[]).filter(r=>r.id!==d.id);save();render();if(SH)renderSheet();toast("Erledigt.",sn)},
+  remDuty:d=>{const v=vById(d.id),du=PFLICHTEN.find(x=>x.id===d.duty);const x=new Date(today()+"T12:00");x.setDate(x.getDate()+14);
+    const iso=x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");
+    S.reminders=S.reminders||[];S.reminders.push({id:uid(),d:iso,t:"Nachfragen: "+du.t+" („"+v.name+"“)",duty:v.id+du.id});save();if(SH)renderSheet();render();toast("Erinnerung für den "+dateDE(iso)+" gemerkt.",null,true)},
+  planMerk:d=>{S.reminders=S.reminders||[];S.reminders.push({id:uid(),d:d.day,t:d.t,pid:d.id});save();buzz("ok");toast("Auf der Startseite vorgemerkt.",null,true)},
+  icsBday:d=>{const p=S.people.find(x=>x.id===d.id);icsSave("geburtstag-"+p.name.toLowerCase().replace(/[^a-zäöüß0-9]+/g,"-"),icsWrap([icsEvent({t:"Geburtstag "+p.name,d:nextBdayIso(p),yearly:true,alarm:true})]))},
+  icsBdays:()=>{const ev=S.people.filter(p=>p.bday).map(p=>icsEvent({t:"Geburtstag "+p.name,d:nextBdayIso(p),yearly:true,alarm:true}));icsSave("geburtstage",icsWrap(ev))},
   planNext:()=>{const q=SH.queue.slice();const pid=q.shift();openSheet("plan",{pid,queue:q},true)},
   pidee:d=>{SH.idee=+d.id;renderSheet()},
   prhythm:d=>{const p=S.people.find(x=>x.id===d.id);p.rhythm=+d.val;save();renderSheet();render()},
@@ -1959,6 +1991,24 @@ function checkUpdate(){
   fetch(location.pathname,{cache:"reload"}).then(r=>r.text()).then(t=>{const m=t.match(/const BUILD="([^"]+)"/);if(!m||m[1]===BUILD)return;
     const go=()=>{if(busy()){setTimeout(go,4000);return}location.reload()};go()}).catch(()=>{});
 }
+/* ---------- Erinnerungen (nur auf Wunsch) ---------- */
+const remOn=()=>!!(S.settings.rem&&S.settings.rem.home);
+function remItems(days){const out=[],t=today();
+  S.people.forEach(p=>{const n=bdayIn(p);if(n!=null&&n<=days)out.push({k:"bday",n,t:p.name+" hat "+(n===0?"heute":n===1?"morgen":"in "+n+" Tagen")+" Geburtstag",pid:p.id})});
+  (S.reminders||[]).forEach(r=>{const n=dayDiff(t,r.d);if(n<=days)out.push({k:"rem",n,t:r.t,id:r.id,pid:r.pid||"",d:r.d})});
+  return out.sort((a,b)=>a.n-b.n)}
+function remBox(){if(!remOn())return"";const it=remItems(7);if(!it.length)return"";
+  return`<div class="sec"><div class="wirehead"><span class="eyebrow">Bald</span></div><div class="list">${it.map(x=>`<div class="li" style="cursor:default"><span class="dot" style="--c:var(--leben)"></span><span class="grow"><span class="t">${esc(x.t)}</span><span class="s">${x.k==="rem"?(x.n<0?"war am "+dateDE(x.d):x.n===0?"heute":dateDE(x.d)):"Geburtstag"}</span></span>${x.k==="rem"?`<button class="btn small ghost" data-a="remDone" data-id="${x.id}">Erledigt</button>`:x.pid?`<button class="btn small ghost" data-a="person" data-id="${x.pid}">Öffnen</button>`:""}</div>`).join("")}</div></div>`}
+function updBadge(){try{if(!navigator.setAppBadge)return;if(!(S.settings.rem&&S.settings.rem.badge)){navigator.clearAppBadge&&navigator.clearAppBadge();return}
+  const n=remItems(1).length;n?navigator.setAppBadge(n):navigator.clearAppBadge()}catch(e){}}
+function icsDate(iso){return iso.replace(/-/g,"")}
+function icsWrap(ev){return"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Nebenexistenz//DE\r\n"+ev.join("")+"END:VCALENDAR\r\n"}
+function icsEvent(o){const st=new Date().toISOString().replace(/[-:]/g,"").slice(0,15)+"Z";
+  return"BEGIN:VEVENT\r\nUID:"+uid()+uid()+"@nebenexistenz\r\nDTSTAMP:"+st+"\r\nDTSTART;VALUE=DATE:"+icsDate(o.d)+"\r\nDTEND;VALUE=DATE:"+icsDate(nextDay(o.d))+"\r\n"+(o.yearly?"RRULE:FREQ=YEARLY\r\n":"")+"SUMMARY:"+o.t.replace(/[,;]/g," ")+"\r\n"+
+  (o.alarm?"BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:"+o.t.replace(/[,;]/g," ")+"\r\nTRIGGER:-PT15H\r\nEND:VALARM\r\n":"")+"END:VEVENT\r\n"}
+function icsSave(name,txt){try{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([txt],{type:"text/calendar"}));a.download=name+".ics";document.body.appendChild(a);a.click();a.remove()}catch(e){toast("Das ging nicht.")}}
+function nextBdayIso(p){const n=bdayIn(p);const x=new Date(today()+"T12:00");x.setDate(x.getDate()+n);return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")}
+function gcalLink(t,d,yearly){return"https://calendar.google.com/calendar/render?action=TEMPLATE&text="+encodeURIComponent(t)+"&dates="+icsDate(d)+"/"+icsDate(nextDay(d))+(yearly?"&recur="+encodeURIComponent("RRULE:FREQ=YEARLY"):"")}
 function countOpen(){const t=today();if(S.opens.d===t)S.opens.n++;else S.opens={d:t,n:1};persist()}
 addEventListener("popstate",()=>{
   if(backPending){backPending=false;const f=deferred;deferred=null;if(f)f();return}
