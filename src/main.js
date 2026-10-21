@@ -404,7 +404,7 @@ function viewHome(){
   if(S.demo) s+=`<div class="banner"><span>Du siehst Beispieldaten.</span><button class="btn small ghost" data-a="demoOff">Beispiel löschen</button></div>`;
   s+=stepCard(st);
   if(!isVorhabentag()&&S.override!==today()){
-    s+=`<p class="muted small" style="text-align:center;margin-top:18px">Heute ist kein Vorhabentag. Deine Vorhaben findest du unter „Vorhaben“, falls du sie doch brauchst.</p>`;
+    s+=`<p class="muted small" style="text-align:center;margin-top:18px">Heute ist kein Vorhabentag, deshalb schlägt die App hier keine Arbeit vor. Planen, nachsehen und neue Vorhaben anlegen kannst du jederzeit unter „Vorhaben“.</p>`;
     return s+foot();
   }
   const act=aktive();
