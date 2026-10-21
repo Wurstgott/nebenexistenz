@@ -320,6 +320,8 @@ details.more>.grid2{padding-bottom:14px}
 .opt .ox{font:400 14px/1.45 var(--f-ui);color:var(--muted)}
 .opt[aria-pressed="true"]{border-color:var(--neben);background:var(--wash-neben)}
 .opt[aria-pressed="true"] .ot::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--neben);flex:none}
+.av-s{width:32px;height:32px;border-radius:50%;background:var(--leben);color:var(--on);display:grid;place-items:center;font:700 14px var(--f-disp);flex:none}
+.person{min-height:44px}
 </style>
 </head>
 <body>
@@ -762,13 +764,14 @@ const LEBEN_IMPULSE = [
   "Schreib {p} eine kurze Nachricht, ohne Anliegen.",
   "Verabrede dich mit {p} für diese Woche.",
   "Frag {p}, wie es wirklich geht, und hör zu.",
-  "Plan mit {p} etwas, das nichts mit Geld zu tun hat."
+  "Plan mit {p} etwas, das nichts mit Geld zu tun hat.",
+  "Frag {p}, was gerade gut läuft, und freu dich mit."
 ];
 
 /* ===== Nebenexistenz · Logik ===== */
-const BUILD="20.10.2026, 13:22";
+const BUILD="21.10.2026, 10:56";
 const KEY="nebenexistenz-v1";
-const GV=5;
+const GV=6;
 const MAX_AKTIV=3;
 const IN_FRAME=(()=>{try{return window.self!==window.top}catch(e){return true}})();
 
@@ -795,6 +798,7 @@ function migrate(){
   if((S.gv||1)<2){S.ventures.forEach(v=>{S.lv[v.id]=stage(v);v.pending=v.pending||{}});S.fresh=[]}
   if((S.gv||1)<4){const p=S.prof;if(n0(p.wp)||n0(p.verplant))p.weiteres=true;delete p.krypto;delete p.immoRate}
   if((S.gv||1)<5){["oed","beamt"].forEach(k=>{if(S.pduties[k]){S.ventures.forEach(v=>{v.duties[k]=v.duties[k]||S.pduties[k];if(k==="beamt")v.duties.beamtA=v.duties.beamtA||S.pduties[k]});delete S.pduties[k]}})}
+  if((S.gv||1)<6){S.people.forEach(p=>{if(p.rhythm==null)p.rhythm=0;p.moments=p.moments||[]})}
   const ap=S.settings.apps||{};
   if(ap.wg==="https://wurstgott.github.io/wertegeruest/") ap.wg="https://wurstgott.github.io/fernweh/wertegeruest/";
   if(ap.gk==="https://wurstgott.github.io/glueckskompass/") ap.gk="https://wurstgott.github.io/fernweh/glueckskompass/";
@@ -821,6 +825,8 @@ const tplOf=v=>VORLAGEN.find(t=>t.id===v.tpl);
 const landN=()=>{const l=LAENDER.find(x=>x.id===S.prof.land);return l?l.n:"deinem Bundesland"};
 const dateDE=d=>{if(!d)return"";const [y,m,t]=d.split("-");return t+"."+m+"."+y};
 const agoTxt=d=>{if(!d)return"noch nie";const n=dayDiff(d,today());return n<=0?"heute":n===1?"gestern":"vor "+n+" Tagen"};
+const nextDay=iso=>{const x=new Date(iso+"T12:00");x.setDate(x.getDate()+1);return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")};
+function keepWeek(){const w=SH&&SH.w;if(!w)return;const a=$("#w-weg"),b=$("#w-mom");if(a)w.weg=a.value.trim();if(b)w.mom=b.value}
 const ZAHLW=n=>["null","einer","zwei","drei","vier","fünf","sechs","sieben","acht","neun","zehn","elf","zwölf"][n]||String(n);
 const WT=["So","Mo","Di","Mi","Do","Fr","Sa"];
 const WTL=["Sonntag","Montag","Dienstag","Mittwoch","Donnerstag","Freitag","Samstag"];
@@ -920,8 +926,20 @@ function weekMin(vid){const t=today();
   const tm=S.time.filter(x=>dayDiff(x.d,t)<7&&(!vid||x.vid===vid)).reduce((s,x)=>s+n0(x.min),0);
   const rn=S.ventures.filter(v=>!vid||v.id===vid).reduce((s,v)=>s+v.runs.filter(r=>dayDiff(r.d,t)<7&&dayDiff(r.d,t)>=0).reduce((a,r)=>a+n0(r.meineStd)*60,0),0);
   return tm+rn}
-const seenRecently=p=>{const t=today();return (p.last&&dayDiff(p.last,t)<=14)||(p.added&&dayDiff(p.added,t)<14)};
-function lifeShare(){if(!S.people.length) return null; return S.people.filter(seenRecently).length/S.people.length}
+/* Nahe Menschen: kein Zählen, kein Vergleichen. Nur wer selbst einen Rhythmus wünscht, bekommt einen leisen Hinweis. */
+const RHYTHMEN=[[0,"ohne festen Rhythmus"],[7,"etwa jede Woche"],[14,"etwa alle zwei Wochen"],[30,"etwa einmal im Monat"],[90,"alle paar Monate"]];
+const since=p=>p.last?dayDiff(p.last,today()):(p.added?dayDiff(p.added,today()):999);
+const overdue=(p,f=1.5)=>n0(p.rhythm)>0&&p.last!==today()&&since(p)>n0(p.rhythm)*f;
+function lifeShare(){const r=S.people.filter(p=>n0(p.rhythm)>0);if(!r.length)return null;return r.filter(p=>!overdue(p)).length/r.length}
+function bdayIn(p){if(!p.bday)return null;const [m,d]=p.bday.split("-").map(Number);if(!m||!d)return null;
+  const t=new Date(today()+"T12:00"),y=t.getFullYear();let x=new Date(y,m-1,d,12);if(x<t)x=new Date(y+1,m-1,d,12);return Math.round((x-t)/864e5)}
+function freieTage(n){const out=[],t=new Date(today()+"T12:00");
+  for(let i=1;i<=21&&out.length<n;i++){const x=new Date(t);x.setDate(t.getDate()+i);if(!S.prof.tage.includes(x.getDay()))out.push(x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0"))}
+  return out}
+function isoWeek(){const d=new Date(today()+"T12:00");d.setDate(d.getDate()+3-((d.getDay()+6)%7));const w1=new Date(d.getFullYear(),0,4);return d.getFullYear()+"-"+(1+Math.round(((d-w1)/864e5-3+((w1.getDay()+6)%7))/7))}
+function altPerson(){const o=S.people.filter(p=>overdue(p,2));if(!o.length)return null;const wk=isoWeek();
+  if(!S.alt||S.alt.wk!==wk){S.alt={wk,d:today()};persist()}
+  if(S.alt.d!==today())return null;return o.sort((a,b)=>since(b)/b.rhythm-since(a)/a.rhythm)[0]}
 function balance(){
   const budget=Math.max(30,n0(S.prof.stunden)*60), load=weekMin()/budget, ls=lifeShare();
   const solo=aktive().filter(v=>v.solo).length;
@@ -933,17 +951,24 @@ function balance(){
 const isVorhabentag=()=>S.prof.tage.includes(new Date().getDay())||S.firstDay===today();
 
 /* ---------- Nächster Schritt ---------- */
-function stalePerson(){
-  const c=S.people.filter(p=>p.last!==today());
-  if(!c.length) return null;
-  return c.sort((a,b)=>(a.last||"0000")<(b.last||"0000")?-1:1)[0];
+function lifePick(){
+  const c=S.people.filter(p=>p.last!==today());if(!c.length)return null;
+  const sc=p=>n0(p.rhythm)>0?since(p)/n0(p.rhythm):Math.min(since(p),60)/60*0.8;
+  return c.sort((a,b)=>sc(b)-sc(a))[0];
 }
-function lifeStep(reason){
-  if(!S.people.length) return{tone:"var(--leben)",ey:"Leben",t:"Trag die Menschen ein, die dir nah sind",x:reason+" Die App achtet dann darauf, dass sie nicht aus dem Blick geraten.",btns:[{l:"Menschen eintragen",a:"sheet",id:"people",c:"leben"}]};
-  const p=stalePerson();
-  if(!p||S.lifeLater===today()) return{tone:"var(--leben)",ey:"Leben",t:"Für heute ist nichts mehr dran",x:"Die Vorhaben laufen auch, wenn du nicht hinschaust. Genieß den Rest des Tages.",btns:[]};
-  const imp=LEBEN_IMPULSE[(new Date().getDate()+p.name.length)%LEBEN_IMPULSE.length].replace("{p}",p.name);
-  return{tone:"var(--leben)",ey:"Leben",t:imp,x:reason+" Zuletzt eingetragen: "+agoTxt(p.last)+".",btns:[{l:"Erledigt",a:"seen",id:p.id,c:"leben"},{l:"Heute nicht",a:"later",c:"ghost"}]};
+function lifeStep(reason,pid){
+  if(!S.people.length) return{tone:"var(--leben)",ey:"Leben",t:"Trag die Menschen ein, die dir nah sind",x:reason+" Die App hilft dir dann, Zeit mit ihnen einzuplanen.",btns:[{l:"Menschen eintragen",a:"sheet",id:"people",c:"leben"}]};
+  const p=pid?S.people.find(x=>x.id===pid):lifePick();
+  if(!p||(!pid&&S.lifeLater===today())) return{tone:"var(--leben)",ey:"Leben",t:"Für heute ist nichts mehr dran",x:"Die Vorhaben laufen auch, wenn du nicht hinschaust. Genieß den Rest des Tages.",btns:[]};
+  const imp=LEBEN_IMPULSE[(new Date().getDate()+p.name.length)%LEBEN_IMPULSE.length].replace(/\{p\}/g,p.name);
+  return{tone:"var(--leben)",ey:"Leben",t:imp,x:reason,btns:[{l:"Verabredung vorschlagen",a:"plan",id:p.id,c:"leben"},{l:"Hatten wir heute",a:"seen",id:p.id,c:"ghost"},{l:"Heute nicht",a:"later",c:"ghost"}]};
+}
+function bdayStep(){
+  const y=new Date().getFullYear();
+  const p=S.people.filter(p=>{const n=bdayIn(p);return n!=null&&n<=3&&(S.bdayOk||{})[p.id]!==y+"-"+p.bday}).sort((a,b)=>bdayIn(a)-bdayIn(b))[0];
+  if(!p)return null;const n=bdayIn(p);
+  const wann=n===0?"heute":n===1?"morgen":n===2?"übermorgen":"am "+WTL[(new Date().getDay()+n)%7];
+  return{tone:"var(--leben)",ey:"Leben · Geburtstag",t:p.name+" hat "+wann+" Geburtstag.",x:"Magst du dir etwas überlegen?",btns:[{l:"Verabredung vorschlagen",a:"plan",id:p.id,c:"leben"},{l:"Gut, danke",a:"bdayOk",id:p.id,c:"ghost"}]};
 }
 function ventureStep(v){
   const n=stage(v), t=tplOf(v), bt=BAUTEILE[n];
@@ -967,6 +992,8 @@ function isPending(v,d){return !!((v.pending||{})[d.id])}
 function nextStep(){
   const p=S.prof;
   if(!p.land||!p.beruf) return{tone:"var(--neben)",ey:"Anfang",t:"Deinen Rahmen festlegen",x:"Bundesland, Hauptberuf, Geld und Zeit. Daraus leitet die App ab, welche Schritte nötig sind und wie viel du einsetzen kannst.",btns:[{l:"Rahmen festlegen",a:"sheet",id:"profil"}]};
+  const bs=bdayStep(); if(bs) return bs;
+  if(S.lifeFocus&&S.lifeFocus.d===today()) return lifeStep("Heute ist Zeit für das Leben.",S.lifeFocus.id);
   if(new Date().getDay()===0&&!(S.weeks.length&&dayDiff(S.weeks[S.weeks.length-1].d,today())<6))
     return{tone:"var(--sinn)",ey:"Wochenblick",t:"Wie war die Woche?",x:"Drei kurze Fragen: mit wem du Zeit hattest, ob die Vorhaben Kraft gegeben oder genommen haben, und was du weglässt.",btns:[{l:"Wochenblick",a:"sheet",id:"week",c:"sinn"}]};
   if(!isVorhabentag()&&S.override!==today()){
@@ -980,7 +1007,9 @@ function nextStep(){
   const sorted=[...act].sort((a,b)=>stage(b)-stage(a)||(a.created<b.created?-1:1));
   const ripe=sorted.find(v=>stage(v)>=7);
   const v=ripe||sorted.find(v=>stage(v)<7)||sorted[0];
-  return ventureStep(v);
+  const st=ventureStep(v), ap=altPerson();
+  if(ap) st.btns.push({l:"Heute lieber Zeit für "+ap.name+"?",a:"lifeToday",id:ap.id,c:"ghost"});
+  return st;
 }
 
 /* ---------- Text füllen ---------- */
@@ -1052,18 +1081,18 @@ function mobileSVG(){
   s+=`<g class="mob-hit" data-a="tab" data-id="leben" tabindex="0" role="button" aria-label="Lebensseite öffnen">`;
   s+=`<circle cx="56" cy="146" r="40" fill="transparent"/><line x1="56" y1="60" x2="56" y2="118" stroke="${W}" stroke-width="1.5"/>`;
   s+=`<path class="plate" d="${shapePath("kreis",56,146,28)}" fill="var(--leben)"/>`;
-  s+=`<text x="56" y="150" text-anchor="middle" font-family="var(--f-mono)" font-size="11" fill="var(--on)" letter-spacing=".06em">LEBEN</text>`;
+  s+=`<text x="56" y="150" text-anchor="middle" font-family="var(--f-mono)" font-size="11" fill="var(--on)" letter-spacing=".06em">LEBEN</text></g>`;
   const ppl=S.people.slice(0,6);
   if(ppl.length){
-    s+=`<line x1="56" y1="174" x2="56" y2="194" stroke="${W}" stroke-width="1.5"/><path d="M18 196 Q56 190 96 196" fill="none" stroke="${W}" stroke-width="1.5"/><circle cx="56" cy="193" r="2.2" fill="${W}"/>`;
+    s+=`<line x1="56" y1="174" x2="56" y2="194" stroke="${W}" stroke-width="1.5"/><path d="M12 196 Q56 190 112 196" fill="none" stroke="${W}" stroke-width="1.5"/><circle cx="56" cy="193" r="2.2" fill="${W}"/>`;
     ppl.forEach((p,i)=>{
-      const x=ppl.length===1?56:20+i*(76/(ppl.length-1)), len=22+((i*37)%30), y=195+len;
-      const rec=p.last&&dayDiff(p.last,today())<=14, r=rec?9:7.5; maxY=Math.max(maxY,y+r);
-      s+=`<line x1="${x.toFixed(1)}" y1="195" x2="${x.toFixed(1)}" y2="${(y-r).toFixed(1)}" stroke="${W}" stroke-width="1.2"/>`;
-      s+=rec?`<circle cx="${x.toFixed(1)}" cy="${y}" r="${r}" fill="var(--leben)"/>`:`<circle cx="${x.toFixed(1)}" cy="${y}" r="${r}" fill="none" stroke="var(--leben)" stroke-width="1.5" stroke-dasharray="3 2.5"/>`;
+      const x=ppl.length===1?56:16+i*(92/(ppl.length-1)), y=222+((i%2)*16), r=10, od=overdue(p); maxY=Math.max(maxY,y+r);
+      s+=`<g class="mob-hit" data-a="person" data-id="${p.id}" tabindex="0" role="button" aria-label="${esc(p.name)}${od?", länger nicht gesehen":""}">`;
+      s+=`<circle cx="${x.toFixed(1)}" cy="${y}" r="20" fill="transparent"/><line x1="${x.toFixed(1)}" y1="195" x2="${x.toFixed(1)}" y2="${y-r}" stroke="${W}" stroke-width="1.2"/>`;
+      s+=od?`<circle cx="${x.toFixed(1)}" cy="${y}" r="${r}" fill="var(--bg)" stroke="var(--leben)" stroke-width="1.5" stroke-dasharray="3 2.5"/>`:`<circle cx="${x.toFixed(1)}" cy="${y}" r="${r}" fill="var(--leben)"/>`;
+      s+=`<text x="${x.toFixed(1)}" y="${y+4}" text-anchor="middle" font-family="var(--f-ui)" font-weight="700" font-size="11" fill="${od?"var(--leben)":"var(--on)"}">${esc(p.name.slice(0,1).toUpperCase())}</text></g>`;
     });
   }
-  s+=`</g>`;
   /* Vorhaben-Seite */
   s+=`<line x1="298" y1="60" x2="298" y2="88" stroke="${W}" stroke-width="1.5"/><path d="M214 92 Q280 84 340 92" fill="none" stroke="${W}" stroke-width="1.6"/><circle cx="298" cy="88" r="2.5" fill="${W}"/>`;
   s+=`<g class="mob-hit" data-a="tab" data-id="vorhaben" tabindex="0" role="button" aria-label="Geld, zu den Vorhaben"><circle cx="216" cy="122" r="22" fill="transparent"/><line x1="216" y1="92" x2="216" y2="112" stroke="${W}" stroke-width="1.3"/><path class="plate" d="${shapePath("kreis",216,126,14)}" fill="var(--geld)"/></g>`;
@@ -1100,8 +1129,7 @@ function mobileSVG(){
 function balanceLine(){
   const b=balance(), h=(weekMin()/60);
   const st={zieht:"Die Vorhaben ziehen",leben:"Das Leben wiegt schwerer",gleich:"Im Gleichgewicht",leer:"Noch hängt nur das Leben"}[b.state];
-  const ppl=S.people.length?` · ${S.people.filter(seenRecently).length} von ${S.people.length} Menschen gesehen`:"";
-  return`<p class="balance"><b>${st}</b> · ${h.toLocaleString("de-DE",{maximumFractionDigits:1})} von ${S.prof.stunden} Std. Vorhabenzeit${ppl}</p>
+  return`<p class="balance"><b>${st}</b> · ${h.toLocaleString("de-DE",{maximumFractionDigits:1})} von ${S.prof.stunden} Std. Vorhabenzeit</p>
   <p class="legend" aria-hidden="true"><span><i style="background:var(--leben)"></i>Leben</span><span><i style="background:var(--neben)"></i>Vorhaben</span><span><i style="background:var(--geld)"></i>Geld</span></p>`;
 }
 
@@ -1140,6 +1168,10 @@ function viewHome(){
   let s=`<h1 class="vh">Nebenexistenz</h1><div class="stage">${mobileSVG()}</div>${balanceLine()}`;
   if(S.demo) s+=`<div class="banner"><span>Du siehst Beispieldaten.</span><button class="btn small ghost" data-a="demoOff">Beispiel löschen</button></div>`;
   s+=stepCard(st);
+  if(!isVorhabentag()&&S.override!==today()){
+    s+=`<p class="muted small" style="text-align:center;margin-top:18px">Heute ist kein Vorhabentag. Deine Vorhaben findest du unter „Vorhaben“, falls du sie doch brauchst.</p>`;
+    return s+foot();
+  }
   const act=aktive();
   if(act.length){
     s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Hängt gerade</span></div><div class="list">`;
@@ -1231,9 +1263,8 @@ const NOASK=new Set(["Eigene Seite","Team","Käuferin oder Käufer"]);
 function viewLeben(){
   const b=balance(), wm=weekMin();
   let s=`<h2 style="margin-top:12px">Leben</h2><p class="muted small">Die linke Seite des Mobiles. Sie zieht mit, und sie soll schwerer wiegen als die Vorhaben.</p>`;
-  s+=`<div class="sec"><div class="figs"><button class="fig" data-a="explain" data-id="zeit"><span class="k">Vorhabenzeit diese Woche</span><span class="v num">${(wm/60).toLocaleString("de-DE",{maximumFractionDigits:1})} / ${S.prof.stunden} Std.</span><span class="bar" style="--c:${b.load>1?"var(--leben)":"var(--neben)"}"><i style="width:${clamp(b.load*100,0,100)}%"></i></span></button>
-  <button class="fig" data-a="explain" data-id="menschen"><span class="k">Menschen gesehen</span><span class="v num">${S.people.length?S.people.filter(p=>p.last&&dayDiff(p.last,today())<=14).length+" / "+S.people.length:"–"}</span><span class="e">in den letzten 14 Tagen</span></button></div></div>`;
-  s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Nahe Menschen</span></div><p class="muted small">Tipp auf einen Namen, wenn du heute mit dem Menschen Zeit hattest.</p><div class="people">${S.people.map(p=>{const st=!p.last||dayDiff(p.last,today())>14;return`<button class="person ${st?"stale":""}" data-a="seen" data-id="${p.id}" aria-label="${esc(p.name)}, zuletzt ${agoTxt(p.last)}"><span class="av">${esc(p.name.slice(0,1).toUpperCase())}</span>${esc(p.name)} <span class="ago">${agoTxt(p.last)}</span></button>`}).join("")}<button class="chip" data-a="sheet" data-id="people">${S.people.length?"Bearbeiten":"Menschen eintragen"}</button></div></div>`;
+  s+=`<div class="sec"><div class="figs" style="grid-template-columns:1fr"><button class="fig" data-a="explain" data-id="zeit"><span class="k">Vorhabenzeit diese Woche</span><span class="v num">${(wm/60).toLocaleString("de-DE",{maximumFractionDigits:1})} / ${S.prof.stunden} Std.</span><span class="bar" style="--c:${b.load>1?"var(--leben)":"var(--neben)"}"><i style="width:${clamp(b.load*100,0,100)}%"></i></span></button></div></div>`;
+  s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Nahe Menschen</span></div><p class="muted small">${S.people.length?"Tipp auf einen Namen. Dort trägst du ein, dass ihr Zeit hattet, schlägst eine Verabredung vor oder hältst einen schönen Moment fest.":"Trag bis zu sechs Menschen ein, die dir nah sind. Die App hilft dir, Zeit mit ihnen einzuplanen, und misst nichts."}</p><div class="people">${S.people.map(p=>{const od=overdue(p);return`<button class="person ${od?"stale":""}" data-a="person" data-id="${p.id}" aria-label="${esc(p.name)}${od?", länger nicht gesehen":""}"><span class="av">${esc(p.name.slice(0,1).toUpperCase())}</span>${esc(p.name)}</button>`}).join("")}${S.people.length<6?`<button class="chip" data-a="sheet" data-id="people">Mensch hinzufügen</button>`:""}</div>${momentHTML()}</div>`;
   s+=`<div class="sec"><div class="wirehead"><span class="eyebrow">Deine Vorhabentage</span></div><p class="muted small">Nur an diesen Tagen schlägt die App Schritte für die Vorhaben vor. An allen anderen Tagen ist Leben dran.</p><div class="chips">${[1,2,3,4,5,6,0].map(d=>`<button class="chip" data-a="tag" data-id="${d}" data-key="tag${d}" aria-pressed="${S.prof.tage.includes(d)}">${WT[d]}</button>`).join("")}</div>
   <div class="field"><span class="lab">Stunden pro Woche für alle Vorhaben</span><div class="chips">${[1,2,3,4,6,8].map(h=>`<button class="chip" data-a="std" data-id="${h}" data-key="std${h}" aria-pressed="${S.prof.stunden==h}">${h}</button>`).join("")}</div></div></div>`;
   s+=`<div class="sec"><div class="chips"><button class="btn sinn" data-a="sheet" data-id="week">Wochenblick</button><button class="btn ghost" data-a="sheet" data-id="time">Vorhabenzeit eintragen</button></div>${S.weeks.length?`<p class="muted small">Letzter Wochenblick ${agoTxt(S.weeks[S.weeks.length-1].d)}: ${esc({gab:"Die Vorhaben haben Kraft gegeben.",neutral:"Weder noch.",nahm:"Die Vorhaben haben Kraft genommen."}[S.weeks[S.weeks.length-1].kraft]||"")}${S.weeks[S.weeks.length-1].weg?" Weglassen: „"+esc(S.weeks[S.weeks.length-1].weg)+"“":""}</p>`:""}</div>`;
@@ -1242,6 +1273,10 @@ function viewLeben(){
   s+=wissenHTML("leben","Warum die Lebensseite schwerer wiegt");
   return s+foot();
 }
+function allMoments(){const out=[];S.people.forEach(p=>(p.moments||[]).forEach(m=>out.push({...m,pid:p.id,name:p.name})));(S.momente||[]).forEach(m=>out.push({...m,pid:"",name:""}));return out}
+function oldMoment(minAge){const o=allMoments().filter(m=>dayDiff(m.d,today())>=minAge);if(!o.length)return null;return o[(new Date().getDate())%o.length]}
+function momentHTML(){const m=oldMoment(14);if(!m)return"";
+  return`<div class="note leben" style="margin-top:4px"><span class="small">${m.name?"Mit "+esc(m.name)+", ":""}${dateDE(m.d)}</span><span>„${esc(m.text)}“</span></div>`}
 function appLinks(){
   const a=S.settings.apps;
   return`<div class="sec"><div class="wirehead"><span class="eyebrow">Deine anderen Apps</span></div><div class="list">
@@ -1383,9 +1418,34 @@ const SHEETS={
     <button class="btn wide" data-a="saveMember" data-id="${v.id}">Hinzufügen</button>`},
 
   people(){return`${head("Leben","Nahe Menschen","var(--leben)")}
-    <p class="muted small">Bis zu sechs Menschen, die dir wichtig sind. Nur Vornamen, nur auf deinem Gerät.</p>
-    <div class="list">${S.people.map(p=>`<div class="li" style="cursor:default"><span class="grow"><span class="t">${esc(p.name)}</span><span class="s">zuletzt ${agoTxt(p.last)}</span></span><button class="btn small ghost" data-a="delPerson" data-id="${p.id}">Entfernen</button></div>`).join("")}</div>
+    <p class="muted small">Bis zu sechs Menschen, die dir wichtig sind. Ein Vorname genügt. Alles bleibt auf deinem Gerät.</p>
+    <div class="list">${S.people.map(p=>`<button class="li" data-a="person" data-id="${p.id}"><span class="av-s">${esc(p.name.slice(0,1).toUpperCase())}</span><span class="grow"><span class="t">${esc(p.name)}</span><span class="s">${esc((RHYTHMEN.find(r=>r[0]===n0(p.rhythm))||RHYTHMEN[0])[1])}</span></span><span class="chev"></span></button>`).join("")}</div>
     ${S.people.length<6?`<div class="field"><label for="p-n">Neuer Name</label><input id="p-n" type="text" maxlength="24" placeholder="zum Beispiel Mama, Jonas"></div><button class="btn wide leben" data-a="addPerson">Hinzufügen</button>`:""}`},
+
+  person(o){const p=S.people.find(x=>x.id===o.pid);if(!p)return"";const bm=p.bday?p.bday.split("-"):["",""];
+    const MON=["Januar","Februar","März","April","Mai","Juni","Juli","August","September","Oktober","November","Dezember"];
+    return`${head("Nahe Menschen",p.name,"var(--leben)")}
+    <div class="stack"><button class="btn wide leben" data-a="seen" data-id="${p.id}" ${p.last===today()?"disabled":""}>${p.last===today()?"Heute eingetragen":"Wir hatten heute Zeit"}</button><button class="btn wide ghost" data-a="plan" data-id="${p.id}">Verabredung vorschlagen</button></div>
+    ${p.last?`<p class="hint">Zuletzt eingetragen am ${dateDE(p.last)}.</p>`:""}
+    <div class="field"><span class="lab">Wie oft siehst du ${esc(p.name)} gern?</span><div class="chips">${RHYTHMEN.map(([d,l])=>`<button class="chip" data-a="prhythm" data-id="${p.id}" data-val="${d}" data-key="rh${d}" aria-pressed="${n0(p.rhythm)===d}" style="--c:var(--leben)">${l}</button>`).join("")}</div><span class="hint">Nur ein Wunsch. Ist es deutlich länger her, wird die Scheibe im Mobile blass. Mehr passiert nicht.</span></div>
+    <div class="field"><span class="lab">Geburtstag (optional, ohne Jahr)</span><div class="grid2"><select id="pb-d" data-a-change="pbday" aria-label="Tag"><option value="">Tag</option>${Array.from({length:31},(_,i)=>`<option value="${String(i+1).padStart(2,"0")}" ${bm[1]===String(i+1).padStart(2,"0")?"selected":""}>${i+1}.</option>`).join("")}</select><select id="pb-m" aria-label="Monat"><option value="">Monat</option>${MON.map((m,i)=>`<option value="${String(i+1).padStart(2,"0")}" ${bm[0]===String(i+1).padStart(2,"0")?"selected":""}>${m}</option>`).join("")}</select></div><span class="hint">Drei Tage vorher erinnert dich die App einmal daran.</span></div>
+    <div class="wirehead"><span class="eyebrow">Schöne Momente</span></div>
+    ${(p.moments||[]).slice().reverse().map(m=>`<div class="formrow"><div><p class="k">${dateDE(m.d)}</p><p class="v">„${esc(m.text)}“</p></div><button class="btn small ghost" data-a="delMoment" data-id="${p.id}" data-mid="${m.id}" aria-label="Moment löschen">Löschen</button></div>`).join("")}
+    <div class="field"><label for="pm-t">Etwas, das du festhalten möchtest (optional)</label><textarea id="pm-t" maxlength="280" placeholder="zum Beispiel: Am See, endlich mal wieder richtig gelacht."></textarea><span class="hint">Bleibt nur auf diesem Gerät. Ab und zu erinnert dich die App auf der Lebensseite an einen solchen Moment.</span></div>
+    <button class="btn wide ghost" data-a="addMoment" data-id="${p.id}">Festhalten</button>
+    <button class="linkbtn" data-a="delPerson" data-id="${p.id}">${esc(p.name)} aus der Liste entfernen</button>`},
+
+  plan(o){const p=S.people.find(x=>x.id===o.pid);if(!p)return"";const tage=freieTage(3);const day=SH.day||tage[0];const idee=SH.idee||0;
+    const IDEEN=[["Spaziergang","Lust auf einen Spaziergang"],["Kaffee","Lust auf einen Kaffee"],["Essen","Lust, zusammen zu essen"],["Telefonat","Zeit zum Telefonieren"]];
+    const dd=new Date(day+"T12:00"), wt=WTL[dd.getDay()], dm=String(dd.getDate()).padStart(2,"0")+"."+String(dd.getMonth()+1).padStart(2,"0")+".";
+    const txt="Hallo "+p.name+", hast du am "+wt+", "+dm+", "+IDEEN[idee][1]+"?";
+    const g="https://calendar.google.com/calendar/render?action=TEMPLATE&text="+encodeURIComponent("Zeit mit "+p.name)+"&dates="+day.replace(/-/g,"")+"/"+nextDay(day).replace(/-/g,"");
+    return`${head("Verabredung","Zeit mit "+p.name,"var(--leben)")}
+    <div class="field"><span class="lab">Diese Tage sind frei von Vorhaben</span><div class="chips">${tage.map(t=>{const x=new Date(t+"T12:00");return`<button class="chip" data-a="pday" data-id="${t}" data-key="pd${t}" aria-pressed="${t===day}" style="--c:var(--leben)">${WT[x.getDay()]} ${x.getDate()}.${x.getMonth()+1}.</button>`}).join("")}</div></div>
+    <div class="field"><span class="lab">Was passt?</span><div class="chips">${IDEEN.map(([l],i)=>`<button class="chip" data-a="pidee" data-id="${i}" data-key="pi${i}" aria-pressed="${i===idee}" style="--c:var(--leben)">${l}</button>`).join("")}</div></div>
+    <div class="field"><label for="pl-t">Nachricht zum Kopieren</label><textarea id="pl-t">${esc(txt)}</textarea></div>
+    <div class="chips"><button class="btn leben" data-a="copy" data-src="pl-t">Nachricht kopieren</button><a class="btn ghost" href="${esc(g)}" target="_blank" rel="noopener">In Google Kalender</a>${IN_FRAME?"":`<button class="btn ghost" data-a="ics" data-id="${p.id}" data-day="${day}">Kalenderdatei</button>`}</div>
+    <p class="hint">Die App verschickt nichts und merkt sich nicht, ob ihr euch trefft.</p>`},
 
   werte(){return`${head("Werte","Deine Werte","var(--sinn)")}
     <p class="muted small">Bis zu fünf Werte. Jedes Vorhaben fragt dich, ob es zu ihnen passt. Wenn du das Wertegerüst nutzt, trag hier deine Stützen ein.</p>
@@ -1393,11 +1453,14 @@ const SHEETS={
     ${S.werte.length<5?`<div class="field"><label for="w-n">Neuer Wert</label><input id="w-n" type="text" maxlength="24" placeholder="zum Beispiel Gerechtigkeit"></div><button class="btn wide sinn" data-a="addWert">Hinzufügen</button>`:""}
     <a class="linkbtn" href="${esc(S.settings.apps.wg)}" target="_blank" rel="noopener">Im Wertegerüst vertiefen</a>`},
 
-  week(){const w=SH.w||(SH.w={kraft:"",weg:"",mit:[]});
+  week(){const w=SH.w||(SH.w={kraft:"",weg:"",mit:[],wen:[],mp:""});const om=oldMoment(21);
     return`${head("Wochenblick","Wie war die Woche?","var(--sinn)")}
+    ${om?`<div class="note leben"><span class="small">Vor einiger Zeit hast du festgehalten${om.name?", mit "+esc(om.name):""}:</span><span>„${esc(om.text)}“</span></div>`:""}
     <div class="field"><span class="lab">Mit wem hattest du diese Woche Zeit?</span><div class="chips">${S.people.map(p=>`<button class="chip" data-a="wmit" data-id="${p.id}" data-key="wm${p.id}" aria-pressed="${w.mit.includes(p.id)}" style="--c:var(--leben)">${esc(p.name)}</button>`).join("")||`<span class="muted small">Noch keine Menschen eingetragen.</span>`}</div></div>
     <div class="field"><span class="lab">Haben die Vorhaben dir Kraft gegeben oder genommen?</span><div class="chips">${[["gab","gegeben"],["neutral","weder noch"],["nahm","genommen"]].map(([k,l])=>`<button class="chip" data-a="wkraft" data-id="${k}" data-key="wk${k}" aria-pressed="${w.kraft===k}">${l}</button>`).join("")}</div></div>
     <div class="field"><label for="w-weg">Was lässt du nächste Woche weg?</label><input id="w-weg" type="text" value="${esc(w.weg)}" placeholder="zum Beispiel abends Mails beantworten"></div>
+    <div class="field"><label for="w-mom">Ein schöner Moment dieser Woche (optional)</label><textarea id="w-mom" maxlength="280" placeholder="zum Beispiel: Pfannkuchen am Sonntag mit allen.">${esc(w.mom||"")}</textarea>${S.people.length?`<div class="chips">${S.people.map(p=>`<button class="chip" data-a="wmp" data-id="${p.id}" data-key="wmp${p.id}" aria-pressed="${w.mp===p.id}" style="--c:var(--leben)">mit ${esc(p.name)}</button>`).join("")}</div>`:""}<span class="hint">Bleibt nur auf diesem Gerät.</span></div>
+    ${S.people.length?`<div class="field"><span class="lab">Wen möchtest du nächste Woche sehen?</span><div class="chips">${S.people.map(p=>`<button class="chip" data-a="wwen" data-id="${p.id}" data-key="ww${p.id}" aria-pressed="${w.wen.includes(p.id)}" style="--c:var(--leben)">${esc(p.name)}</button>`).join("")}</div><span class="hint">Diesmal niemand ist auch eine gute Antwort. Wählst du jemanden, schlägt die App gleich einen freien Tag vor.</span></div>`:""}
     <button class="btn wide sinn" data-a="saveWeek" ${w.kraft?"":"disabled"}>Abschließen</button>
     <a class="linkbtn" href="${esc(S.settings.apps.gk)}" target="_blank" rel="noopener">Ein passendes Experiment im Glückskompass suchen</a>`},
 
@@ -1742,7 +1805,8 @@ document.addEventListener("input",e=>{
   if(parts[0]==="v"&&parts[2]==="calc"){const v=vById(parts[1]);const o=$("#calcOut");if(o)o.innerHTML=calcOut(v);const po=$("#preisOut");if(po&&SH)renderSheetPart(v)}
   if(parts[0]==="prof"){const o=$("#rahmenOut");if(o)o.innerHTML=rahmenOut()}
 });
-document.addEventListener("change",e=>{if(e.target.tagName==="SELECT"&&e.target.dataset.bind){e.target.dispatchEvent(new Event("input",{bubbles:true}))}});
+document.addEventListener("change",e=>{if(e.target.tagName==="SELECT"&&e.target.dataset.bind){e.target.dispatchEvent(new Event("input",{bubbles:true}))}
+  if((e.target.id==="pb-d"||e.target.id==="pb-m")&&SH&&SH.id==="person"){const p=S.people.find(x=>x.id===SH.pid);const dd=$("#pb-d").value,mm=$("#pb-m").value;p.bday=dd&&mm?mm+"-"+dd:"";save()}});
 function renderSheetPart(v){const pr=preisSpanne(v),r=calc(v),po=$("#preisOut");if(!po)return;const vs=po.querySelectorAll(".v");if(vs[0])vs[0].textContent=eur(pr[0])+" – "+eur(pr[1]);if(vs[1])vs[1].textContent=eur(r.jahrG)}
 
 const ACT={
@@ -1755,7 +1819,7 @@ const ACT={
   explain:d=>openSheet("explain",{eid:d.id}),
   later:()=>{S.lifeLater=today();save();render()},
   override:()=>{S.override=today();save();render();toast("Für heute zeigt die App auch Schritte für die Vorhaben. Morgen gilt wieder dein Rahmen.")},
-  seen:d=>{const p=S.people.find(x=>x.id===d.id);if(!p)return;const sn=snapshot();p.last=today();save();render();if(SH)renderSheet();buzz("ok");toast(p.name+" eingetragen.",sn,true)},
+  seen:d=>{const p=S.people.find(x=>x.id===d.id);if(!p)return;const sn=snapshot();p.last=today();if(S.lifeFocus&&S.lifeFocus.id===p.id)S.lifeFocus=null;save();render();if(SH)renderSheet();buzz("ok");toast("Schön. "+p.name+" ist eingetragen.",sn,true)},
   hintOff:d=>{S.hintsOff[d.id]=1;S.hint={d:today(),id:"",done:1};save();render()},
   welcomeGo:()=>{S.onb=true;if(!S.firstDay)S.firstDay=today();save();openSheet("profil",{},true)},
   demoOn:d=>{const own=!S.demo&&(S.ventures.length||S.prof.land||S.people.length);
@@ -1813,16 +1877,33 @@ const ACT={
   exitArt:d=>{SH.art=d.id;const v=vById(SH.vid);v.exitArt=d.id;save();renderSheet()},
   doExit:d=>{const v0=vById(d.id);if(stage(v0)<7&&!SH.exitAsk){SH.exitAsk=true;renderSheet();const b=$("[data-a=doExit]");if(b)b.scrollIntoView({block:"center"});return}
     const v=vById(d.id),sn=snapshot(),pi=$("#x-preis"),an=$("#x-an");v.exit={d:today(),art:d.art,preis:pi?n0(pi.value):0,an:an?an.value.trim():""};save();closeSheet();setTab("home");buzz("ok");toast("„"+v.name+"“ ist weitergegeben.",sn,true)},
-  addPerson:()=>{const i=$("#p-n"),nm=(i.value||"").trim();if(!nm)return;S.people.push({id:uid(),name:nm,last:"",added:today()});save();renderSheet();render();setTimeout(()=>{const x=$("#p-n");if(x)x.focus()},30)},
-  delPerson:d=>{const sn=snapshot();S.people=S.people.filter(p=>p.id!==d.id);save();renderSheet();render();toast("Entfernt.",sn)},
+  addPerson:()=>{const i=$("#p-n"),nm=(i.value||"").trim();if(!nm)return;S.people.push({id:uid(),name:nm,last:"",added:today(),rhythm:0,moments:[]});save();renderSheet();render();setTimeout(()=>{const x=$("#p-n");if(x)x.focus()},30)},
+  delPerson:d=>{const sn=snapshot();S.people=S.people.filter(p=>p.id!==d.id);save();if(SH&&SH.id==="person")backSheet();else renderSheet();render();toast("Entfernt.",sn)},
   addWert:()=>{const i=$("#w-n"),w=(i.value||"").trim();if(!w||S.werte.includes(w))return;S.werte.push(w);save();renderSheet();render()},
   delWert:d=>{const sn=snapshot();S.werte.splice(+d.id,1);save();renderSheet();render();toast("Entfernt.",sn)},
   tag:d=>{const x=+d.id,t=S.prof.tage;S.prof.tage=t.includes(x)?t.filter(y=>y!==x):[...t,x];save();render();if(SH)renderSheet()},
   std:d=>{S.prof.stunden=+d.id;save();render();if(SH)renderSheet()},
-  wmit:d=>{const w=SH.w;w.mit=w.mit.includes(d.id)?w.mit.filter(x=>x!==d.id):[...w.mit,d.id];w.weg=$("#w-weg").value;renderSheet()},
-  wkraft:d=>{SH.w.kraft=d.id;SH.w.weg=$("#w-weg").value;renderSheet()},
-  saveWeek:()=>{const w=SH.w;w.weg=$("#w-weg").value.trim();w.mit.forEach(id=>{const p=S.people.find(x=>x.id===id);if(p&&(!p.last||p.last<today()))p.last=today()});S.weeks.push({d:today(),kraft:w.kraft,weg:w.weg,mit:w.mit});save();closeSheet();buzz("ok");
-    toast(w.kraft==="nahm"?"Notiert. Vielleicht ist ein Vorhaben reif zum Weitergeben.":"Wochenblick gespeichert.",null,true)},
+  wmit:d=>{const w=SH.w;keepWeek();w.mit=w.mit.includes(d.id)?w.mit.filter(x=>x!==d.id):[...w.mit,d.id];renderSheet()},
+  wkraft:d=>{keepWeek();SH.w.kraft=d.id;renderSheet()},
+  wmp:d=>{keepWeek();SH.w.mp=SH.w.mp===d.id?"":d.id;renderSheet()},
+  wwen:d=>{const w=SH.w;keepWeek();w.wen=w.wen.includes(d.id)?w.wen.filter(x=>x!==d.id):[...w.wen,d.id];renderSheet()},
+  saveWeek:()=>{const w=SH.w;keepWeek();w.mit.forEach(id=>{const p=S.people.find(x=>x.id===id);if(p&&(!p.last||p.last<today()))p.last=today()});
+    if(w.mom&&w.mom.trim()){const m={id:uid(),d:today(),text:w.mom.trim()};const p=S.people.find(x=>x.id===w.mp);if(p){p.moments=p.moments||[];p.moments.push(m)}else{S.momente=S.momente||[];S.momente.push(m)}}
+    S.weeks.push({d:today(),kraft:w.kraft,weg:w.weg,mit:w.mit,wen:w.wen});save();buzz("ok");
+    if(w.wen.length){openSheet("plan",{pid:w.wen[0]},true);toast("Wochenblick gespeichert.",null,true);return}
+    closeSheet();toast(w.kraft==="nahm"?"Notiert. Vielleicht ist ein Vorhaben reif zum Weitergeben.":"Wochenblick gespeichert.",null,true)},
+  person:d=>openSheet("person",{pid:d.id}),
+  plan:d=>openSheet("plan",{pid:d.id}),
+  pday:d=>{SH.day=d.id;renderSheet()},
+  pidee:d=>{SH.idee=+d.id;renderSheet()},
+  prhythm:d=>{const p=S.people.find(x=>x.id===d.id);p.rhythm=+d.val;save();renderSheet();render()},
+  addMoment:d=>{const p=S.people.find(x=>x.id===d.id),t=($("#pm-t").value||"").trim();if(!t)return;p.moments=p.moments||[];p.moments.push({id:uid(),d:today(),text:t});save();renderSheet();buzz("ok");toast("Festgehalten.",null,true)},
+  delMoment:d=>{const p=S.people.find(x=>x.id===d.id),sn=snapshot();p.moments=(p.moments||[]).filter(m=>m.id!==d.mid);save();renderSheet();render();toast("Gelöscht.",sn)},
+  bdayOk:d=>{const p=S.people.find(x=>x.id===d.id);S.bdayOk=S.bdayOk||{};S.bdayOk[p.id]=new Date().getFullYear()+"-"+p.bday;save();render()},
+  lifeToday:d=>{S.lifeFocus={d:today(),id:d.id};save();render()},
+  ics:d=>{const p=S.people.find(x=>x.id===d.id);try{const st=new Date().toISOString().replace(/[-:]/g,"").slice(0,15)+"Z";
+    const ics="BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Nebenexistenz//DE\r\nBEGIN:VEVENT\r\nUID:"+uid()+"@nebenexistenz\r\nDTSTAMP:"+st+"\r\nDTSTART;VALUE=DATE:"+d.day.replace(/-/g,"")+"\r\nDTEND;VALUE=DATE:"+nextDay(d.day).replace(/-/g,"")+"\r\nSUMMARY:Zeit mit "+p.name+"\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([ics],{type:"text/calendar"}));a.download="zeit-mit-"+p.name.toLowerCase().replace(/[^a-zäöüß0-9]+/g,"-")+".ics";document.body.appendChild(a);a.click();a.remove()}catch(e){toast("Das ging nicht. Nutze den Google-Kalender.")}},
   theme:d=>{S.settings.theme=d.id;applyTheme();save();renderSheet()},
   vib:()=>{S.settings.vib=!S.settings.vib;save();renderSheet()},
   export:()=>openSheet("exportv"),
@@ -1847,7 +1928,8 @@ function loadDemo(){
   S.prof={land:"SN",ort:"Leipzig",beruf:"ang",netto:2900,fix:2100,ruecklage:30000,stunden:4,tage:[2,6]};
   S.pduties={ag:d(40),fse:d(30),ku:d(30),kasse:d(28),bg:d(30)};
   S.werte=["Gerechtigkeit","Nachhaltigkeit","Freiheit"];
-  S.people=[{id:"p1",name:"Mia",last:d(2)},{id:"p2",name:"Jonas",last:d(5)},{id:"p3",name:"Mama",last:d(19)},{id:"p4",name:"Ali",last:d(9)}];
+  const bd=(()=>{const x=new Date();x.setDate(x.getDate()+2);return String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")})();
+  S.people=[{id:"p1",name:"Mia",last:d(2),rhythm:7,moments:[{id:"m1",d:d(40),text:"Mit Mia am See, endlich mal wieder richtig gelacht."}]},{id:"p2",name:"Jonas",last:d(5),rhythm:14,moments:[]},{id:"p3",name:"Mama",last:d(30),rhythm:14,moments:[]},{id:"p4",name:"Ali",last:d(9),rhythm:30,bday:bd,moments:[]}];
   const t=VORLAGEN[0];
   S.ventures=[{id:"v1",tpl:"markt",name:"Wachs & Docht",desc:"Bienenwachstücher und Kerzen auf zwei Leipziger Weihnachtsmärkten",created:d(60),passOk:d(50),
     calc:Object.assign({},t.calc,{form:"kurz",laeufe:24,start:1800,inventar:1200}),

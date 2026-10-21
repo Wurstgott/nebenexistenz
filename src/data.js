@@ -415,5 +415,6 @@ const LEBEN_IMPULSE = [
   "Schreib {p} eine kurze Nachricht, ohne Anliegen.",
   "Verabrede dich mit {p} für diese Woche.",
   "Frag {p}, wie es wirklich geht, und hör zu.",
-  "Plan mit {p} etwas, das nichts mit Geld zu tun hat."
+  "Plan mit {p} etwas, das nichts mit Geld zu tun hat.",
+  "Frag {p}, was gerade gut läuft, und freu dich mit."
 ];

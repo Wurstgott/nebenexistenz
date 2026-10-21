@@ -294,3 +294,5 @@ details.more>.grid2{padding-bottom:14px}
 .opt .ox{font:400 14px/1.45 var(--f-ui);color:var(--muted)}
 .opt[aria-pressed="true"]{border-color:var(--neben);background:var(--wash-neben)}
 .opt[aria-pressed="true"] .ot::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--neben);flex:none}
+.av-s{width:32px;height:32px;border-radius:50%;background:var(--leben);color:var(--on);display:grid;place-items:center;font:700 14px var(--f-disp);flex:none}
+.person{min-height:44px}
