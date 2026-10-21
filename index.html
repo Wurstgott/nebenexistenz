@@ -769,7 +769,7 @@ const LEBEN_IMPULSE = [
 ];
 
 /* ===== Nebenexistenz · Logik ===== */
-const BUILD="21.10.2026, 12:25";
+const BUILD="21.10.2026, 12:30";
 const KEY="nebenexistenz-v1";
 const GV=6;
 const MAX_AKTIV=3;
@@ -825,6 +825,7 @@ const tplOf=v=>VORLAGEN.find(t=>t.id===v.tpl);
 const landN=()=>{const l=LAENDER.find(x=>x.id===S.prof.land);return l?l.n:"deinem Bundesland"};
 const dateDE=d=>{if(!d)return"";const [y,m,t]=d.split("-");return t+"."+m+"."+y};
 const agoTxt=d=>{if(!d)return"noch nie";const n=dayDiff(d,today());return n<=0?"heute":n===1?"gestern":"vor "+n+" Tagen"};
+const slug=t=>String(t).toLowerCase().replace(/[^a-zäöüß0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40);
 const nextDay=iso=>{const x=new Date(iso+"T12:00");x.setDate(x.getDate()+1);return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")};
 function keepWeek(){const w=SH&&SH.w;if(!w)return;const a=$("#w-weg"),b=$("#w-mom");if(a)w.weg=a.value.trim();if(b)w.mom=b.value}
 const ZAHLW=n=>["null","einer","zwei","drei","vier","fünf","sechs","sieben","acht","neun","zehn","elf","zwölf"][n]||String(n);
@@ -1435,7 +1436,9 @@ const SHEETS={
     <div class="stack"><button class="btn wide leben" data-a="seen" data-id="${p.id}" ${p.last===today()?"disabled":""}>${p.last===today()?"Heute eingetragen":"Wir hatten heute Zeit"}</button><button class="btn wide ghost" data-a="plan" data-id="${p.id}">Verabredung vorschlagen</button></div>
     ${p.last?`<p class="hint">Zuletzt eingetragen am ${dateDE(p.last)}.</p>`:""}
     <div class="field"><span class="lab">Wie oft siehst du ${esc(p.name)} gern?</span><div class="chips">${RHYTHMEN.map(([d,l])=>`<button class="chip" data-a="prhythm" data-id="${p.id}" data-val="${d}" data-key="rh${d}" aria-pressed="${n0(p.rhythm)===d}" style="--c:var(--leben)">${l}</button>`).join("")}</div><span class="hint">Nur ein Wunsch. Ist es deutlich länger her, wird die Scheibe im Mobile blass. Mehr passiert nicht.</span></div>
-    <div class="field"><span class="lab">Geburtstag (optional, ohne Jahr)</span><div class="grid2"><select id="pb-d" data-a-change="pbday" aria-label="Tag"><option value="">Tag</option>${Array.from({length:31},(_,i)=>`<option value="${String(i+1).padStart(2,"0")}" ${bm[1]===String(i+1).padStart(2,"0")?"selected":""}>${i+1}.</option>`).join("")}</select><select id="pb-m" aria-label="Monat"><option value="">Monat</option>${MON.map((m,i)=>`<option value="${String(i+1).padStart(2,"0")}" ${bm[0]===String(i+1).padStart(2,"0")?"selected":""}>${m}</option>`).join("")}</select></div><span class="hint">Drei Tage vorher erinnert dich die App einmal daran.</span>${p.bday?`<div class="chips"><a class="btn small ghost" href="${esc(gcalLink("Geburtstag "+p.name,nextBdayIso(p),true))}" target="_blank" rel="noopener">Jährlich in Google Kalender</a>${IN_FRAME?"":`<button class="btn small ghost" data-a="icsBday" data-id="${p.id}">Kalenderdatei</button>`}</div>`:""}</div>
+    <div class="field"><span class="lab">Geburtstag (optional, ohne Jahr)</span><div class="grid2"><select id="pb-d" data-a-change="pbday" aria-label="Tag"><option value="">Tag</option>${Array.from({length:31},(_,i)=>`<option value="${String(i+1).padStart(2,"0")}" ${bm[1]===String(i+1).padStart(2,"0")?"selected":""}>${i+1}.</option>`).join("")}</select><select id="pb-m" aria-label="Monat"><option value="">Monat</option>${MON.map((m,i)=>`<option value="${String(i+1).padStart(2,"0")}" ${bm[0]===String(i+1).padStart(2,"0")?"selected":""}>${m}</option>`).join("")}</select></div><span class="hint">Drei Tage vorher erinnert dich die App einmal daran.</span>${p.bday?`<div class="chips"><button class="chip" data-a="inCal" data-id="${p.id}" data-key="incal" aria-pressed="${!!p.inCal}" style="--c:var(--leben)">Steht schon in meinem Kalender</button></div>
+      ${p.inCal?"":`<div class="chips"><a class="btn small ghost" data-a="gcal" data-key="bday-${p.id}" data-label="${esc(p.name)}s Geburtstag" href="${esc(gcalLink("Geburtstag "+p.name,nextBdayIso(p),true))}" target="_blank" rel="noopener">Jährlich in Google Kalender</a>${IN_FRAME?"":`<button class="btn small ghost" data-a="icsBday" data-id="${p.id}">Kalenderdatei</button>`}</div>`}
+      ${(S.calLog||{})["bday-"+p.id]&&!p.inCal?`<p class="hint">Am ${dateDE(S.calLog["bday-"+p.id])} in deinen Kalender übernommen.</p>`:""}`:""}</div>
     <div class="wirehead"><span class="eyebrow">Schöne Momente</span></div>
     ${(p.moments||[]).slice().reverse().map(m=>`<div class="formrow"><div><p class="k">${dateDE(m.d)}</p><p class="v">„${esc(m.text)}“</p></div><button class="btn small ghost" data-a="delMoment" data-id="${p.id}" data-mid="${m.id}" aria-label="Moment löschen">Löschen</button></div>`).join("")}
     <div class="field"><label for="pm-t">Etwas, das du festhalten möchtest (optional)</label><textarea id="pm-t" maxlength="280" placeholder="zum Beispiel: Am See, endlich mal wieder richtig gelacht."></textarea><span class="hint">Bleibt nur auf diesem Gerät. Ab und zu erinnert dich die App auf der Lebensseite an einen solchen Moment.</span></div>
@@ -1458,7 +1461,7 @@ const SHEETS={
     <div class="field"><span class="lab">Diese Tage sind frei von Vorhaben</span><div class="chips">${tage.map(t=>{const x=new Date(t+"T12:00");return`<button class="chip" data-a="pday" data-id="${t}" data-key="pd${t}" aria-pressed="${t===day}" style="--c:var(--leben)">${t===today()?"heute":WT[x.getDay()]+" "+x.getDate()+"."+(x.getMonth()+1)+"."}</button>`}).join("")}</div></div>
     <div class="field"><span class="lab">Was passt?</span><div class="chips">${IDEEN.map(([l],i)=>`<button class="chip" data-a="pidee" data-id="${i}" data-key="pi${i}" aria-pressed="${i===idee}" style="--c:var(--leben)">${l}</button>`).join("")}</div></div>
     <div class="field"><label for="pl-t">Nachricht zum Kopieren</label><textarea id="pl-t">${esc(txt)}</textarea></div>
-    <div class="chips"><button class="btn leben" data-a="copy" data-src="pl-t">Nachricht kopieren</button><a class="btn ghost" href="${esc(g)}" target="_blank" rel="noopener">In Google Kalender</a>${IN_FRAME?"":`<button class="btn ghost" data-a="ics" data-id="${p.id}" data-day="${day}">Kalenderdatei</button>`}</div>
+    <div class="chips"><button class="btn leben" data-a="copy" data-src="pl-t">Nachricht kopieren</button><a class="btn ghost" data-a="gcal" data-key="plan-${p.id}-${day}" data-label="Diese Verabredung" href="${esc(g)}" target="_blank" rel="noopener">In Google Kalender</a>${IN_FRAME?"":`<button class="btn ghost" data-a="ics" data-id="${p.id}" data-day="${day}">Kalenderdatei</button>`}</div>
     ${remOn()?`<button class="btn wide ghost" data-a="planMerk" data-id="${p.id}" data-day="${day}" data-t="${esc("Zeit mit "+p.name+": "+IDEEN[idee][0])}">Auf der Startseite vormerken</button>`:""}
     <p class="hint">Die App verschickt nichts und merkt sich nicht, ob ihr euch trefft.</p>
     ${o.queue&&o.queue.length?`<button class="btn wide ghost" data-a="planNext">Weiter: Zeit mit ${esc((S.people.find(x=>x.id===o.queue[0])||{}).name||"")}</button>`:""}`},
@@ -1763,11 +1766,12 @@ function showMoment(){
 
 /* ---------- Toast mit Rückgängig ---------- */
 let toastT=null, undoSnap=null;
-function toast(msg,undo,ok){
-  const t=$("#toast"); undoSnap=undo||null;
-  t.innerHTML=`${ok?`<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`:""}<span>${esc(msg)}</span>${undo?`<button data-a="undo">Rückgängig</button>`:""}`;
+let calPending=null;
+function toast(msg,undo,ok,force){
+  const t=$("#toast"); undoSnap=undo||null; calPending=force||null;
+  t.innerHTML=`${ok?`<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`:""}<span>${esc(msg)}</span>${undo?`<button data-a="undo">Rückgängig</button>`:""}${force?`<button data-a="calForce">Trotzdem</button>`:""}`;
   t.classList.toggle("up",!!SH); t.hidden=false; requestAnimationFrame(()=>t.classList.add("on"));
-  clearTimeout(toastT); toastT=setTimeout(()=>{t.classList.remove("on");setTimeout(()=>{t.hidden=true},250);undoSnap=null},undo?5200:2400);
+  clearTimeout(toastT); toastT=setTimeout(()=>{t.classList.remove("on");setTimeout(()=>{t.hidden=true},250);undoSnap=null;calPending=null},(undo||force)?6000:2400);
   live(msg);
 }
 function live(m){const l=$("#live");l.textContent="";setTimeout(()=>{l.textContent=m},50)}
@@ -1806,7 +1810,7 @@ document.addEventListener("click",e=>{
   const el=e.target.closest&&e.target.closest("[data-a]"); if(!el||el.disabled) return;
   const a=el.dataset.a, d=el.dataset;
   if(el.classList.contains("chip")||el.classList.contains("opt")||el.classList.contains("check")||el.classList.contains("person")){lastSel={key:d.key||"",x:e.clientX,y:e.clientY,t:performance.now()};buzz("sel")} else buzz("act");
-  const H=ACT[a]; if(H){ if(el.tagName==="A"&&a!=="claudeGo") e.preventDefault(); H(d,el,e) }
+  const H=ACT[a]; if(H){ if(el.tagName==="A"&&a!=="claudeGo"&&a!=="gcal") e.preventDefault(); H(d,el,e) }
 });
 document.addEventListener("keydown",e=>{
   if(e.key==="Escape"&&SH) backSheet();
@@ -1925,15 +1929,22 @@ const ACT={
     try{if(window.Notification&&Notification.permission!=="granted"){Notification.requestPermission().then(x=>{if(x==="granted")go();else toast("Ohne Erlaubnis für Mitteilungen zeigt das iPhone keine Zahl am Symbol.")})}else go()}catch(e){go()}},
   remSave:()=>{const t=($("#r-t").value||"").trim(),d=$("#r-dd").value;if(!t||!d){buzz("err");toast("Bitte Text und Datum eintragen.");return}
     S.reminders=S.reminders||[];S.reminders.push({id:uid(),d,t});save();closeSheet();buzz("ok");toast("Gemerkt.",null,true)},
-  remGcal:()=>{const t=($("#r-t").value||"").trim()||"Erinnerung",d=$("#r-dd").value||nextDay(today());window.open(gcalLink(t,d,false),"_blank","noopener")},
-  remIcs:()=>{const t=($("#r-t").value||"").trim()||"Erinnerung",d=$("#r-dd").value||nextDay(today());icsSave("erinnerung",icsWrap([icsEvent({t,d,alarm:true})]))},
+  remGcal:()=>{const t=($("#r-t").value||"").trim()||"Erinnerung",d=$("#r-dd").value||nextDay(today());calGuard("rem-"+d+"-"+slug(t),"Diese Erinnerung",()=>window.open(gcalLink(t,d,false),"_blank","noopener"))},
+  remIcs:()=>{const t=($("#r-t").value||"").trim()||"Erinnerung",d=$("#r-dd").value||nextDay(today());calGuard("rem-"+d+"-"+slug(t),"Diese Erinnerung",()=>icsSave("erinnerung",icsWrap([icsEvent({t,d,alarm:true,uid:"rem-"+d+"-"+slug(t)})])))},
+  calForce:()=>{const f=calPending;calPending=null;$("#toast").classList.remove("on");if(f)f()},
+  gcal:(d,el,e)=>{if(S.calLog&&S.calLog[d.key]){e.preventDefault();calGuard(d.key,d.label,()=>window.open(el.href,"_blank","noopener"))}else calDone(d.key)},
+  inCal:d=>{const p=S.people.find(x=>x.id===d.id);p.inCal=!p.inCal;save();renderSheet()},
   remDone:d=>{const sn=snapshot();S.reminders=(S.reminders||[]).filter(r=>r.id!==d.id);save();render();if(SH)renderSheet();toast("Erledigt.",sn)},
   remDuty:d=>{const v=vById(d.id),du=PFLICHTEN.find(x=>x.id===d.duty);const x=new Date(today()+"T12:00");x.setDate(x.getDate()+14);
     const iso=x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");
     S.reminders=S.reminders||[];S.reminders.push({id:uid(),d:iso,t:"Nachfragen: "+du.t+" („"+v.name+"“)",duty:v.id+du.id});save();if(SH)renderSheet();render();toast("Erinnerung für den "+dateDE(iso)+" gemerkt.",null,true)},
   planMerk:d=>{S.reminders=S.reminders||[];S.reminders.push({id:uid(),d:d.day,t:d.t,pid:d.id});save();buzz("ok");toast("Auf der Startseite vorgemerkt.",null,true)},
-  icsBday:d=>{const p=S.people.find(x=>x.id===d.id);icsSave("geburtstag-"+p.name.toLowerCase().replace(/[^a-zäöüß0-9]+/g,"-"),icsWrap([icsEvent({t:"Geburtstag "+p.name,d:nextBdayIso(p),yearly:true,alarm:true})]))},
-  icsBdays:()=>{const ev=S.people.filter(p=>p.bday).map(p=>icsEvent({t:"Geburtstag "+p.name,d:nextBdayIso(p),yearly:true,alarm:true}));icsSave("geburtstage",icsWrap(ev))},
+  icsBday:d=>{const p=S.people.find(x=>x.id===d.id);calGuard("bday-"+p.id,p.name+"s Geburtstag",()=>icsSave("geburtstag-"+slug(p.name),icsWrap([icsEvent({t:"Geburtstag "+p.name,d:nextBdayIso(p),yearly:true,alarm:true,uid:"bday-"+p.id})])))},
+  icsBdays:()=>{S.calLog=S.calLog||{};const all=S.people.filter(p=>p.bday&&!p.inCal),neu=all.filter(p=>!S.calLog["bday-"+p.id]);
+    const go=list=>{list.forEach(p=>S.calLog["bday-"+p.id]=today());persist();if(SH)renderSheet();icsSave("geburtstage",icsWrap(list.map(p=>icsEvent({t:"Geburtstag "+p.name,d:nextBdayIso(p),yearly:true,alarm:true,uid:"bday-"+p.id}))))};
+    if(!all.length){toast("Alle Geburtstage stehen laut dir schon in deinem Kalender.");return}
+    if(!neu.length){toast("Diese Geburtstage hast du schon alle in deinen Kalender übernommen.",null,false,()=>go(all));return}
+    go(neu);if(neu.length<all.length)toast((all.length-neu.length)+" schon übernommene Geburtstage habe ich ausgelassen.")},
   planNext:()=>{const q=SH.queue.slice();const pid=q.shift();openSheet("plan",{pid,queue:q},true)},
   pidee:d=>{SH.idee=+d.id;renderSheet()},
   prhythm:d=>{const p=S.people.find(x=>x.id===d.id);p.rhythm=+d.val;save();renderSheet();render()},
@@ -1941,7 +1952,8 @@ const ACT={
   delMoment:d=>{const p=S.people.find(x=>x.id===d.id),sn=snapshot();p.moments=(p.moments||[]).filter(m=>m.id!==d.mid);save();renderSheet();render();toast("Gelöscht.",sn)},
   bdayOk:d=>{const p=S.people.find(x=>x.id===d.id);S.bdayOk=S.bdayOk||{};S.bdayOk[p.id]=new Date().getFullYear()+"-"+p.bday;save();render()},
   lifeToday:d=>{S.lifeFocus={d:today(),id:d.id};save();render()},
-  ics:d=>{const p=S.people.find(x=>x.id===d.id);try{const st=new Date().toISOString().replace(/[-:]/g,"").slice(0,15)+"Z";
+  ics:d=>{const p=S.people.find(x=>x.id===d.id);calGuard("plan-"+p.id+"-"+d.day,"Diese Verabredung",()=>icsSave("zeit-mit-"+slug(p.name),icsWrap([icsEvent({t:"Zeit mit "+p.name,d:d.day,alarm:true,uid:"plan-"+p.id+"-"+d.day})])))},
+  icsOld:d=>{const p=S.people.find(x=>x.id===d.id);try{const st=new Date().toISOString().replace(/[-:]/g,"").slice(0,15)+"Z";
     const ics="BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Nebenexistenz//DE\r\nBEGIN:VEVENT\r\nUID:"+uid()+"@nebenexistenz\r\nDTSTAMP:"+st+"\r\nDTSTART;VALUE=DATE:"+d.day.replace(/-/g,"")+"\r\nDTEND;VALUE=DATE:"+nextDay(d.day).replace(/-/g,"")+"\r\nSUMMARY:Zeit mit "+p.name+"\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([ics],{type:"text/calendar"}));a.download="zeit-mit-"+p.name.toLowerCase().replace(/[^a-zäöüß0-9]+/g,"-")+".ics";document.body.appendChild(a);a.click();a.remove()}catch(e){toast("Das ging nicht. Nutze den Google-Kalender.")}},
   theme:d=>{S.settings.theme=d.id;applyTheme();save();renderSheet()},
@@ -2001,10 +2013,16 @@ function remBox(){if(!remOn())return"";const it=remItems(7);if(!it.length)return
   return`<div class="sec"><div class="wirehead"><span class="eyebrow">Bald</span></div><div class="list">${it.map(x=>`<div class="li" style="cursor:default"><span class="dot" style="--c:var(--leben)"></span><span class="grow"><span class="t">${esc(x.t)}</span><span class="s">${x.k==="rem"?(x.n<0?"war am "+dateDE(x.d):x.n===0?"heute":dateDE(x.d)):"Geburtstag"}</span></span>${x.k==="rem"?`<button class="btn small ghost" data-a="remDone" data-id="${x.id}">Erledigt</button>`:x.pid?`<button class="btn small ghost" data-a="person" data-id="${x.pid}">Öffnen</button>`:""}</div>`).join("")}</div></div>`}
 function updBadge(){try{if(!navigator.setAppBadge)return;if(!(S.settings.rem&&S.settings.rem.badge)){navigator.clearAppBadge&&navigator.clearAppBadge();return}
   const n=remItems(1).length;n?navigator.setAppBadge(n):navigator.clearAppBadge()}catch(e){}}
+/* Kalender: Die App kann den Kalender nicht lesen. Sie merkt sich, was sie selbst übergeben hat,
+   vergibt feste Kennungen (UID), damit ein erneuter Import ersetzt statt verdoppelt, und respektiert „steht schon im Kalender“. */
+function calGuard(key,label,fn){S.calLog=S.calLog||{};const was=S.calLog[key];
+  if(was){toast(label+" hast du am "+dateDE(was)+" schon in deinen Kalender übernommen.",null,false,()=>{calDone(key);fn()});return false}
+  calDone(key);fn();return true}
+function calDone(key){S.calLog=S.calLog||{};S.calLog[key]=today();persist();if(SH)renderSheet()}
 function icsDate(iso){return iso.replace(/-/g,"")}
 function icsWrap(ev){return"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//Nebenexistenz//DE\r\n"+ev.join("")+"END:VCALENDAR\r\n"}
 function icsEvent(o){const st=new Date().toISOString().replace(/[-:]/g,"").slice(0,15)+"Z";
-  return"BEGIN:VEVENT\r\nUID:"+uid()+uid()+"@nebenexistenz\r\nDTSTAMP:"+st+"\r\nDTSTART;VALUE=DATE:"+icsDate(o.d)+"\r\nDTEND;VALUE=DATE:"+icsDate(nextDay(o.d))+"\r\n"+(o.yearly?"RRULE:FREQ=YEARLY\r\n":"")+"SUMMARY:"+o.t.replace(/[,;]/g," ")+"\r\n"+
+  return"BEGIN:VEVENT\r\nUID:"+(o.uid||uid()+uid())+"@nebenexistenz\r\nDTSTAMP:"+st+"\r\nDTSTART;VALUE=DATE:"+icsDate(o.d)+"\r\nDTEND;VALUE=DATE:"+icsDate(nextDay(o.d))+"\r\n"+(o.yearly?"RRULE:FREQ=YEARLY\r\n":"")+"SUMMARY:"+o.t.replace(/[,;]/g," ")+"\r\n"+
   (o.alarm?"BEGIN:VALARM\r\nACTION:DISPLAY\r\nDESCRIPTION:"+o.t.replace(/[,;]/g," ")+"\r\nTRIGGER:-PT15H\r\nEND:VALARM\r\n":"")+"END:VEVENT\r\n"}
 function icsSave(name,txt){try{const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([txt],{type:"text/calendar"}));a.download=name+".ics";document.body.appendChild(a);a.click();a.remove()}catch(e){toast("Das ging nicht.")}}
 function nextBdayIso(p){const n=bdayIn(p);const x=new Date(today()+"T12:00");x.setDate(x.getDate()+n);return x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0")}
